@@ -5,7 +5,8 @@
 A node is a machine that runs Claude Code for the fleet: a WSL distribution,
 a Windows user account, or a container.
 
-1. Install Claude Code and sign in with `claude auth login`.
+1. Install Claude Code and sign in with `claude auth login`. On WSL also install
+   a C linker (`sudo apt install -y build-essential`), rustup and `gh`.
 2. Add the plugin:
 
    ```
