@@ -1,0 +1,9 @@
+apiVersion = "playpilot.io/v1"
+kind = "Role"
+[metadata]
+name = "implementer"
+[spec]
+agent = ".agents/agents/implementer.md"
+profile = "node"
+runtimes = ["claude-cloud", "wsl"]
+mayOpenPullRequest = true
