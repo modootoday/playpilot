@@ -64,6 +64,32 @@ fn refuses_boundary_crossings() {
 }
 
 #[test]
+fn reported_false_refusals_are_allowed() {
+    for cmd in [
+        "git push -u origin claude/x 2>&1 | tail -1",
+        "git push origin claude/x >/dev/null 2>&1",
+        "git push origin claude/x &> push.log",
+        "git push --force-with-lease=claude/x:$old origin claude/x",
+        "python3 - <<'EOF'\nprint('''a \"quoted\" text''')\nEOF",
+        "cat <<EOF > notes.md\nthis mentions git push origin main as text\nEOF",
+    ] {
+        assert!(allowed(cmd), "should allow: {cmd}");
+    }
+}
+
+#[test]
+fn heredocs_fed_to_a_shell_are_checked() {
+    assert!(!allowed("bash <<'EOF'\ngit push origin main\nEOF"));
+    assert!(!allowed(
+        "sh -s <<EOF\ngit push --force origin claude/x\nEOF"
+    ));
+    assert!(!allowed(
+        "git push --force-with-lease=main:$old origin main"
+    ));
+    assert!(!allowed("git push origin main 2>&1"));
+}
+
+#[test]
 fn protected_branches_are_configurable() {
     let p = Policy::from_env_value(Some("codex/rust, main"));
     assert!(decide(&p, &bash("git push origin codex/rust")).is_err());
