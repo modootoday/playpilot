@@ -3,6 +3,8 @@
 //! Reads the hook event JSON on stdin. Exit 0 allows the tool call; exit 2
 //! blocks it and the stderr text is shown to Claude.
 
+mod claim;
+mod gh;
 mod history;
 mod mail;
 mod mcp;
@@ -19,6 +21,7 @@ fn main() -> ExitCode {
         Some("guard") => guard(),
         Some("mail") => mail::cli::main(std::env::args().skip(2).collect()),
         Some("mcp") => mcp::main(),
+        Some(v @ ("claim" | "release")) => claim::cli::main(v, std::env::args().skip(2).collect()),
         Some("history-check") => history_check(std::env::args().skip(2).collect()),
         Some("surface-check") => surface_check(std::env::args().skip(2).collect()),
         Some("validate") => validate_dir(std::env::args().nth(2)),
@@ -33,6 +36,7 @@ fn main() -> ExitCode {
             eprintln!(
                 "       playpilot mcp   (MCP server on stdio; env PLAYPILOT_MAILBOX_REPO, PLAYPILOT_ACTOR)"
             );
+            eprintln!("       playpilot claim|release <owner/repo#n> ... (playpilot claim --help)");
             eprintln!("       playpilot validate <fleet-dir>");
             eprintln!("       {RENDER_USAGE}");
             eprintln!(

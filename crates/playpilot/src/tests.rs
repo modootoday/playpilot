@@ -628,6 +628,8 @@ mod mcp_rules {
             transport: None,
             actor: None,
             repo: None,
+            tracker: None,
+            claim_id: None,
         };
         let init = call(
             &t,
@@ -664,7 +666,15 @@ mod mcp_rules {
             .collect();
         assert_eq!(
             names,
-            ["mail_inbox", "mail_send", "mail_read", "mail_ack", "whoami"]
+            [
+                "mail_inbox",
+                "mail_send",
+                "mail_read",
+                "mail_ack",
+                "task_claim",
+                "task_release",
+                "whoami"
+            ]
         );
         let (text, is_error) = tool(&t, "mail_inbox", json!({}));
         assert!(is_error && text.contains("PLAYPILOT_MAILBOX_REPO"));
@@ -685,11 +695,15 @@ mod mcp_rules {
             transport: Some(&fake),
             actor: Some("design".into()),
             repo: Some("o/r".into()),
+            tracker: None,
+            claim_id: None,
         };
         let kinekino = MailTools {
             transport: Some(&fake),
             actor: Some("kinekino".into()),
             repo: Some("o/r".into()),
+            tracker: None,
+            claim_id: None,
         };
         let (sent, err) = tool(
             &design,
@@ -716,5 +730,123 @@ mod mcp_rules {
                 .0
                 .contains("actor: design")
         );
+    }
+}
+
+mod claim_rules {
+    use std::cell::RefCell;
+
+    use crate::claim::tracker::{Comment, Tracker, parse_item};
+    use crate::claim::{Outcome, claim, holder, parse_utc, release};
+
+    #[derive(Default)]
+    struct Fake {
+        comments: RefCell<Vec<Comment>>,
+        labels: RefCell<Vec<String>>,
+        clock: RefCell<String>,
+        /// A rival claim that lands just before ours, to test the race.
+        rival: Option<String>,
+    }
+
+    impl Fake {
+        fn at(t: &str) -> Self {
+            let f = Fake::default();
+            *f.clock.borrow_mut() = t.into();
+            f
+        }
+        fn push(&self, body: &str, at: &str) {
+            self.comments.borrow_mut().push(Comment {
+                body: body.into(),
+                created_at: at.into(),
+            });
+        }
+    }
+
+    impl Tracker for Fake {
+        fn comments(&self, _: &str) -> Result<Vec<Comment>, String> {
+            Ok(self.comments.borrow().clone())
+        }
+        fn comment(&self, _: &str, body: &str) -> Result<(), String> {
+            let at = self.clock.borrow().clone();
+            if let (Some(r), true) = (&self.rival, body.starts_with("claim:")) {
+                self.push(&format!("claim: {r} {at}"), &at);
+            }
+            self.push(body, &at);
+            Ok(())
+        }
+        fn add_label(&self, _: &str, l: &str) -> Result<(), String> {
+            self.labels.borrow_mut().push(l.into());
+            Ok(())
+        }
+        fn remove_label(&self, _: &str, l: &str) -> Result<(), String> {
+            self.labels.borrow_mut().retain(|x| x != l);
+            Ok(())
+        }
+    }
+
+    const ITEM: &str = "modootoday/kinekino#60";
+
+    #[test]
+    fn parses_items_and_times() {
+        assert_eq!(
+            parse_item(ITEM).unwrap(),
+            ("modootoday/kinekino".into(), 60)
+        );
+        assert!(parse_item("kinekino#60").is_err());
+        assert!(parse_item("a/b#0").is_err());
+        assert!(parse_item("a/b c#1").is_err());
+        assert_eq!(parse_utc("1970-01-02T00:00:01Z"), Some(86_401));
+        let t = "2026-11-19T20:45:07Z";
+        assert_eq!(crate::mail::days_ago(parse_utc(t).unwrap(), 0), t);
+        assert_eq!(parse_utc("2026-11-19 20:45"), None);
+    }
+
+    #[test]
+    fn claim_release_and_replay() {
+        let t = Fake::at("2026-11-19T10:00:00Z");
+        t.push("Please run the Windows gate.", "2026-11-19T09:00:00Z");
+        assert_eq!(
+            claim(&t, ITEM, "node-a", "2026-11-19T10:00:00Z", 6).unwrap(),
+            Outcome::Claimed { took_over: None }
+        );
+        assert_eq!(t.labels.borrow().as_slice(), ["claimed"]);
+        assert_eq!(
+            claim(&t, ITEM, "node-a", "2026-11-19T10:05:00Z", 6).unwrap(),
+            Outcome::AlreadyYours
+        );
+        match claim(&t, ITEM, "node-b", "2026-11-19T11:00:00Z", 6).unwrap() {
+            Outcome::HeldBy(h) => assert_eq!(h.id, "node-a"),
+            o => panic!("{o:?}"),
+        }
+        assert!(release(&t, ITEM, "node-b", None).is_err());
+        release(&t, ITEM, "node-a", Some("ran: cargo test; sha abc; pass")).unwrap();
+        assert!(t.labels.borrow().is_empty());
+        assert_eq!(holder(&t.comments(ITEM).unwrap()), None);
+        assert!(release(&t, ITEM, "node-a", None).is_err());
+    }
+
+    #[test]
+    fn stale_claims_are_taken_over_and_races_withdraw() {
+        let t = Fake::at("2026-11-19T17:00:00Z");
+        t.push("claim: node-a 2026-11-19T09:00:00Z", "2026-11-19T09:00:00Z");
+        t.push("still running", "2026-11-19T10:00:00Z");
+        assert_eq!(
+            claim(&t, ITEM, "node-b", "2026-11-19T17:00:00Z", 6).unwrap(),
+            Outcome::Claimed {
+                took_over: Some("node-a".into())
+            }
+        );
+        assert_eq!(holder(&t.comments(ITEM).unwrap()).unwrap().id, "node-b");
+
+        let r = Fake {
+            rival: Some("node-c".into()),
+            ..Fake::at("2026-11-19T12:00:00Z")
+        };
+        assert_eq!(
+            claim(&r, ITEM, "node-d", "2026-11-19T12:00:00Z", 6).unwrap(),
+            Outcome::LostRace("node-c".into())
+        );
+        assert_eq!(holder(&r.comments(ITEM).unwrap()).unwrap().id, "node-c");
+        assert!(claim(&r, ITEM, "Bad Id", "2026-11-19T12:00:00Z", 6).is_err());
     }
 }

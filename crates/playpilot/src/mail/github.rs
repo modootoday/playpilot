@@ -3,9 +3,6 @@
 //! The mailbox of actor `x` is the open pull request from branch `mailbox/x`;
 //! a message is a comment on it; receipts are the 👀 (read) and 👍 (ack) reactions.
 
-use std::io::Write;
-use std::process::{Command, Stdio};
-
 use serde_json::Value;
 
 use super::message::{Envelope, Stored};
@@ -22,26 +19,7 @@ impl GitHub {
     }
 
     fn api(&self, args: &[&str], stdin: Option<&str>) -> Result<Value, String> {
-        let mut cmd = Command::new("gh");
-        cmd.arg("api").args(args);
-        cmd.stdin(if stdin.is_some() {
-            Stdio::piped()
-        } else {
-            Stdio::null()
-        });
-        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-        let mut child = cmd.spawn().map_err(|e| format!("could not run gh: {e}"))?;
-        if let (Some(input), Some(mut pipe)) = (stdin, child.stdin.take()) {
-            pipe.write_all(input.as_bytes())
-                .map_err(|e| format!("could not write to gh: {e}"))?;
-        }
-        let out = child
-            .wait_with_output()
-            .map_err(|e| format!("gh failed: {e}"))?;
-        if !out.status.success() {
-            return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
-        }
-        serde_json::from_slice(&out.stdout).map_err(|e| format!("gh returned non-JSON: {e}"))
+        crate::gh::api(args, stdin)
     }
 
     /// The pull request number of `actor`'s mailbox.

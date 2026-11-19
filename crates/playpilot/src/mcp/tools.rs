@@ -5,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::{Value, json};
 
 use super::protocol::Tools;
+use crate::claim::tracker::Tracker;
 use crate::mail::message::{Envelope, Stored};
 use crate::mail::transport::{Receipt, Transport};
 
@@ -12,6 +13,9 @@ pub struct MailTools<'a> {
     pub transport: Option<&'a dyn Transport>,
     pub actor: Option<String>,
     pub repo: Option<String>,
+    /// Lane-item claims; the claim id comes from the environment like the actor.
+    pub tracker: Option<&'a dyn Tracker>,
+    pub claim_id: Option<String>,
 }
 
 fn schema(props: Value, required: &[&str]) -> Value {
@@ -97,6 +101,22 @@ impl Tools for MailTools<'_> {
                 "inputSchema": schema(json!({"id": {"type": "integer"}}), &["id"])
             }),
             json!({
+                "name": "task_claim",
+                "description": "Claim a lane item (an issue or pull request, `owner/repo#n`) so no other node works on it. Refuses while another node holds a fresh claim; takes over a stale one.",
+                "inputSchema": schema(json!({
+                    "item": {"type": "string", "description": "owner/repo#number"},
+                    "stale_hours": {"type": "integer", "minimum": 1, "description": "default 6"}
+                }), &["item"])
+            }),
+            json!({
+                "name": "task_release",
+                "description": "Release a lane item this node holds, with an optional result note (command, commit SHA, outcome).",
+                "inputSchema": schema(json!({
+                    "item": {"type": "string"},
+                    "note": {"type": "string"}
+                }), &["item"])
+            }),
+            json!({
                 "name": "whoami",
                 "description": "Show this session's actor and mailbox repository.",
                 "inputSchema": schema(json!({}), &[]),
@@ -108,12 +128,37 @@ impl Tools for MailTools<'_> {
     fn call(&self, name: &str, args: &Value) -> Result<String, String> {
         if name == "whoami" {
             return Ok(format!(
-                "actor: {}\nmailbox repository: {}",
+                "actor: {}\nmailbox repository: {}\nclaim id: {}",
                 self.actor.as_deref().unwrap_or("(PLAYPILOT_ACTOR not set)"),
                 self.repo
                     .as_deref()
-                    .unwrap_or("(PLAYPILOT_MAILBOX_REPO not set)")
+                    .unwrap_or("(PLAYPILOT_MAILBOX_REPO not set)"),
+                self.claim_id
+                    .as_deref()
+                    .unwrap_or("(PLAYPILOT_CLAIM_ID not set)")
             ));
+        }
+        if let Some(verb) = name.strip_prefix("task_") {
+            let t = self
+                .tracker
+                .ok_or("no tracker is configured for this MCP server")?;
+            let id = self
+                .claim_id
+                .as_deref()
+                .ok_or("PLAYPILOT_CLAIM_ID (or PLAYPILOT_ACTOR) is not set for this MCP server")?;
+            let item = str_arg(args, "item").ok_or("`item` (owner/repo#number) is required")?;
+            crate::claim::tracker::parse_item(item)?;
+            return match verb {
+                "claim" => {
+                    let stale = args.get("stale_hours").and_then(Value::as_u64).unwrap_or(6);
+                    let o = crate::claim::claim(t, item, id, &crate::claim::cli::now_utc(), stale)?;
+                    let (text, ok) = crate::claim::cli::describe(item, &o);
+                    if ok { Ok(text) } else { Err(text) }
+                }
+                "release" => crate::claim::release(t, item, id, str_arg(args, "note"))
+                    .map(|()| format!("released {item}")),
+                _ => Err(format!("unknown tool `{name}`")),
+            };
         }
         let (t, actor) = self.ready()?;
         match name {

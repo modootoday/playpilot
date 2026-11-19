@@ -17,10 +17,13 @@ pub fn main() -> ExitCode {
     let repo = std::env::var("PLAYPILOT_MAILBOX_REPO").ok();
     let actor = std::env::var("PLAYPILOT_ACTOR").ok();
     let transport = repo.clone().map(|repo| GitHub { repo });
+    let tracker = crate::claim::github::GitHubTracker;
     let tools = tools::MailTools {
         transport: transport.as_ref().map(|t| t as _),
         actor,
         repo,
+        tracker: Some(&tracker),
+        claim_id: crate::claim::cli::env_id(),
     };
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
