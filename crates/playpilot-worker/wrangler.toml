@@ -1,6 +1,9 @@
 # Phase B Worker. Placeholder names only: the owner adds routes, the account
 # and the Access application when deploying. Set PLAYPILOT_IDENTITIES,
 # PLAYPILOT_CONFIG and (optionally) PLAYPILOT_OPS as secrets or vars at deploy.
+# `/mcp` is served on a second host without Access: set PLAYPILOT_MCP_TOKENS
+# (token hashes to actors) and, for wake on mail, PLAYPILOT_WAKE as secrets.
+# Route only `/mcp*` on that host; `/v1/*` relies on Access headers.
 name = "playpilot"
 main = "build/index.js"
 compatibility_date = "2026-11-01"

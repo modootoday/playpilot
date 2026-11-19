@@ -14,13 +14,24 @@ pub enum Route {
     NotFound,
 }
 
+/// How a route authenticates its caller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Auth {
+    /// Public: the state subset and errors.
+    None,
+    /// `/v1/*`: the Cloudflare Access service token.
+    Access,
+    /// `/mcp`: a bearer token the Worker checks itself, on any host.
+    Bearer,
+}
+
 impl Route {
-    /// Only the public state subset is reachable without a service token.
-    pub fn needs_identity(&self) -> bool {
-        !matches!(
-            self,
-            Route::State | Route::NotFound | Route::MethodNotAllowed(_)
-        )
+    pub fn auth(&self) -> Auth {
+        match self {
+            Route::State | Route::NotFound | Route::MethodNotAllowed(_) => Auth::None,
+            Route::Mcp => Auth::Bearer,
+            _ => Auth::Access,
+        }
     }
 }
 
@@ -91,8 +102,10 @@ mod tests {
 
     #[test]
     fn identity_requirement() {
-        assert!(!Route::State.needs_identity());
-        assert!(Route::Config.needs_identity());
-        assert!(Route::Mcp.needs_identity());
+        assert_eq!(Route::State.auth(), Auth::None);
+        assert_eq!(Route::NotFound.auth(), Auth::None);
+        assert_eq!(Route::Config.auth(), Auth::Access);
+        assert_eq!(Route::Heartbeat("n".into()).auth(), Auth::Access);
+        assert_eq!(Route::Mcp.auth(), Auth::Bearer);
     }
 }

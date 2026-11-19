@@ -14,6 +14,10 @@ pub trait BusStore {
     fn mark(&self, id: u64, kind: Receipt) -> Result<(), String>;
     /// Records an event once per key; false when the key was seen before.
     fn record_event(&self, key: &str, received_at: u64, json: &str) -> Result<bool, String>;
+    /// When `actor`'s routine was last fired, if since its inbox was last empty.
+    fn last_wake(&self, actor: &str) -> Result<Option<u64>, String>;
+    /// Records a fire time, or clears it with `None`.
+    fn set_last_wake(&self, actor: &str, at: Option<u64>) -> Result<(), String>;
 }
 
 #[cfg(test)]
@@ -30,6 +34,7 @@ mod memory {
     pub struct Memory {
         pub messages: RefCell<Vec<Stored>>,
         pub events: RefCell<BTreeMap<String, String>>,
+        pub wakes: RefCell<BTreeMap<String, u64>>,
     }
 
     impl BusStore for Memory {
@@ -101,6 +106,19 @@ mod memory {
             }
             ev.insert(key.into(), json.into());
             Ok(true)
+        }
+
+        fn last_wake(&self, actor: &str) -> Result<Option<u64>, String> {
+            Ok(self.wakes.borrow().get(actor).copied())
+        }
+
+        fn set_last_wake(&self, actor: &str, at: Option<u64>) -> Result<(), String> {
+            let mut w = self.wakes.borrow_mut();
+            match at {
+                Some(t) => w.insert(actor.into(), t),
+                None => w.remove(actor),
+            };
+            Ok(())
         }
     }
 }

@@ -8,6 +8,7 @@ pub mod store;
 use serde::{Deserialize, Serialize};
 
 use crate::domain::ids::valid_name;
+use crate::domain::wake::{Due, should_wake};
 use message::{Envelope, MAX_BODY, MAX_SUBJECT, Receipt, Stored};
 use store::BusStore;
 
@@ -75,11 +76,46 @@ pub fn inbox(store: &dyn BusStore, actor: &str, all: bool) -> Result<Vec<Stored>
 }
 
 /// Marks a message in `actor`'s own mailbox; another actor's copy is refused.
+/// Once nothing is left unacked, the actor's wake debounce starts over.
 pub fn mark(store: &dyn BusStore, actor: &str, id: u64, kind: Receipt) -> Result<(), String> {
     match store.get(id)? {
-        Some(m) if m.mailbox == actor => store.mark(id, kind),
-        _ => Err(format!("message {id} is not in {actor}'s mailbox")),
+        Some(m) if m.mailbox == actor => store.mark(id, kind)?,
+        _ => return Err(format!("message {id} is not in {actor}'s mailbox")),
     }
+    if kind == Receipt::Ack && inbox(store, actor, false)?.is_empty() {
+        store.set_last_wake(actor, None)?;
+    }
+    Ok(())
+}
+
+/// The recipients among `sent` that have a routine (`wakeable`) and are due
+/// a fire. Each fire time is recorded before the caller fires, so a failed or
+/// rate-limited fire also waits out the debounce window.
+pub fn due_wakes(
+    store: &dyn BusStore,
+    sent: &[(String, u64)],
+    wakeable: &[String],
+    now: u64,
+) -> Result<Vec<Due>, String> {
+    let mut actors: Vec<&String> = sent
+        .iter()
+        .map(|(a, _)| a)
+        .filter(|a| wakeable.contains(a))
+        .collect();
+    actors.sort();
+    actors.dedup();
+    let mut due = Vec::new();
+    for actor in actors {
+        let unacked = inbox(store, actor, false)?.len();
+        if should_wake(store.last_wake(actor)?, now, unacked) {
+            store.set_last_wake(actor, Some(now))?;
+            due.push(Due {
+                actor: actor.clone(),
+                unacked,
+            });
+        }
+    }
+    Ok(due)
 }
 
 /// One operation sent from the router to `BusObject`. `actor` is always the
@@ -89,6 +125,9 @@ pub enum BusCmd {
     Send {
         envelope: Envelope,
         directory: Vec<String>,
+        /// Actors that have a routine to fire on new mail.
+        #[serde(default)]
+        wakeable: Vec<String>,
     },
     Inbox {
         actor: String,
@@ -107,7 +146,11 @@ pub enum BusCmd {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BusReply {
-    Sent(Vec<(String, u64)>),
+    /// Copies delivered as `(mailbox, id)`, and the actors to wake now.
+    Sent {
+        copies: Vec<(String, u64)>,
+        wake: Vec<Due>,
+    },
     Messages(Vec<Stored>),
     Marked,
     /// How many events were new (the rest were repeats).
@@ -120,7 +163,11 @@ pub fn apply(store: &dyn BusStore, cmd: BusCmd, now: u64) -> BusReply {
         BusCmd::Send {
             envelope,
             directory,
-        } => send(store, &directory, &envelope, now).map(BusReply::Sent),
+            wakeable,
+        } => send(store, &directory, &envelope, now).and_then(|copies| {
+            let wake = due_wakes(store, &copies, &wakeable, now)?;
+            Ok(BusReply::Sent { copies, wake })
+        }),
         BusCmd::Inbox { actor, all } => inbox(store, &actor, all).map(BusReply::Messages),
         BusCmd::Mark { actor, id, kind } => {
             mark(store, &actor, id, kind).map(|()| BusReply::Marked)

@@ -106,3 +106,67 @@ fn apply_reports_errors_as_replies() {
     );
     assert!(matches!(reply, BusReply::Error(_)));
 }
+
+fn send_cmd(from: &str, to: &str, wakeable: &[&str]) -> BusCmd {
+    BusCmd::Send {
+        envelope: env(from, to),
+        directory: dir(),
+        wakeable: wakeable.iter().map(|a| a.to_string()).collect(),
+    }
+}
+
+fn woken(reply: BusReply) -> Vec<(String, usize)> {
+    match reply {
+        BusReply::Sent { wake, .. } => wake.into_iter().map(|d| (d.actor, d.unacked)).collect(),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn send_wakes_once_per_debounce_window() {
+    use crate::domain::wake::DEBOUNCE_SECS;
+    let s = Memory::default();
+    let w = ["node-b"];
+    assert_eq!(
+        woken(apply(&s, send_cmd("node-a", "node-b", &w), 100)),
+        [("node-b".to_string(), 1)]
+    );
+    assert!(woken(apply(&s, send_cmd("node-c", "node-b", &w), 200)).is_empty());
+    let later = 100 + DEBOUNCE_SECS;
+    assert_eq!(
+        woken(apply(&s, send_cmd("node-c", "node-b", &w), later)),
+        [("node-b".to_string(), 3)]
+    );
+}
+
+#[test]
+fn acking_everything_resets_the_debounce() {
+    let s = Memory::default();
+    let w = ["node-b"];
+    assert_eq!(
+        woken(apply(&s, send_cmd("node-a", "node-b", &w), 100)).len(),
+        1
+    );
+    let id = inbox(&s, "node-b", false).unwrap()[0].id;
+    mark(&s, "node-b", id, Receipt::Read).unwrap();
+    assert!(woken(apply(&s, send_cmd("node-a", "node-b", &w), 110)).is_empty());
+    for m in inbox(&s, "node-b", false).unwrap() {
+        mark(&s, "node-b", m.id, Receipt::Ack).unwrap();
+    }
+    assert_eq!(
+        woken(apply(&s, send_cmd("node-a", "node-b", &w), 120)).len(),
+        1
+    );
+}
+
+#[test]
+fn only_wakeable_recipients_are_woken() {
+    let s = Memory::default();
+    let got = woken(apply(
+        &s,
+        send_cmd("node-a", BROADCAST, &["node-c", "node-a"]),
+        5,
+    ));
+    assert_eq!(got, [("node-c".to_string(), 1)]);
+    assert!(woken(apply(&s, send_cmd("node-a", "node-b", &[]), 6)).is_empty());
+}

@@ -1,23 +1,23 @@
 //! `POST /mcp`: runs MCP tool commands against the Durable Objects as the
-//! caller's mapped actor and claim id.
+//! actor and claim id the caller's credential allows (the `as` argument picks
+//! one when it allows several).
 
+use serde_json::Value;
 use worker::{Env, Request, Response, Result};
 
-use super::{call, http, settings};
+use super::{call, http, settings, wake};
 use crate::domain::bus::message::{Envelope, Receipt};
 use crate::domain::bus::{BusCmd, BusReply};
-use crate::domain::identity::Identity;
 use crate::domain::lease::{LeaseCmd, LeaseReply, Limits, clamp_ttl};
-use crate::domain::mcp::protocol::{Step, handle as parse, tool_result};
-use crate::domain::mcp::tools::{self, Command};
+use crate::domain::mcp::protocol::{Step, handle as parse, tool_result, tool_result_structured};
+use crate::domain::mcp::tools::{self, Command, Invocation};
+use crate::domain::token::Caller;
 
-pub async fn handle(mut req: Request, env: &Env, caller: &Identity) -> Result<Response> {
+pub async fn handle(mut req: Request, env: &Env, caller: &Caller) -> Result<Response> {
     match parse(&req.text().await?) {
         Step::Reply(v) => http::json(200, &v),
         Step::Accepted => http::empty(202),
-        Step::Call { id, command } => {
-            http::json(200, &tool_result(&id, run(env, caller, command).await))
-        }
+        Step::Call { id, call } => http::json(200, &run(env, caller, &id, call).await),
     }
 }
 
@@ -28,25 +28,60 @@ async fn bus(env: &Env, cmd: BusCmd) -> std::result::Result<BusReply, String> {
     }
 }
 
-async fn run(
+async fn run(env: &Env, caller: &Caller, id: &Value, call: Invocation) -> Value {
+    if call.command == Command::Whoami {
+        let actors = caller.actors();
+        let current = caller.resolve(call.as_actor.as_deref()).ok();
+        let current = current
+            .as_ref()
+            .map(|c| (c.actor.as_str(), c.claim.as_str()));
+        return tool_result(id, Ok(tools::render_whoami(&actors, current)));
+    }
+    if let Command::MailInbox { all } = call.command {
+        let outcome = match caller.resolve(call.as_actor.as_deref()) {
+            Ok(me) => {
+                bus(
+                    env,
+                    BusCmd::Inbox {
+                        actor: me.actor,
+                        all,
+                    },
+                )
+                .await
+            }
+            Err(e) => Err(e),
+        };
+        return match outcome {
+            Ok(BusReply::Messages(m)) => {
+                tool_result_structured(id, tools::render_inbox(&m), tools::inbox_structured(&m))
+            }
+            Ok(other) => tool_result(id, Err(format!("unexpected reply {other:?}"))),
+            Err(e) => tool_result(id, Err(e)),
+        };
+    }
+    tool_result(id, run_text(env, caller, call).await)
+}
+
+async fn run_text(
     env: &Env,
-    caller: &Identity,
-    command: Command,
+    caller: &Caller,
+    call: Invocation,
 ) -> std::result::Result<String, String> {
-    let actor = caller.actor.clone();
+    let me = caller.resolve(call.as_actor.as_deref())?;
+    let actor = me.actor.clone();
+    let command = call.command;
     match command {
-        Command::Whoami => Ok(tools::render_whoami(&caller.actor, &caller.claim)),
-        Command::MailInbox { all } => match bus(env, BusCmd::Inbox { actor, all }).await? {
-            BusReply::Messages(m) => Ok(tools::render_inbox(&m)),
-            other => Err(format!("unexpected reply {other:?}")),
-        },
+        Command::Whoami | Command::MailInbox { .. } => Err("handled above".into()),
         Command::MailSend {
             to,
             subject,
             body,
             re,
         } => {
-            let directory = settings::identities(env)?.actors();
+            let wake_map = settings::wake(env).unwrap_or_else(|e| {
+                worker::console_error!("wake config: {e}");
+                Default::default()
+            });
             let envelope = Envelope {
                 from: actor,
                 to,
@@ -54,16 +89,16 @@ async fn run(
                 re,
                 body,
             };
-            match bus(
-                env,
-                BusCmd::Send {
-                    envelope,
-                    directory,
-                },
-            )
-            .await?
-            {
-                BusReply::Sent(s) => Ok(tools::render_sent(&s)),
+            let cmd = BusCmd::Send {
+                envelope,
+                directory: settings::mail_directory(env),
+                wakeable: wake_map.actors(),
+            };
+            match bus(env, cmd).await? {
+                BusReply::Sent { copies, wake: due } => {
+                    wake::fire_all(&wake_map, &due).await;
+                    Ok(tools::render_sent(&copies))
+                }
                 other => Err(format!("unexpected reply {other:?}")),
             }
         }
@@ -81,12 +116,12 @@ async fn run(
             let switches = settings::switches(env)?;
             let limits = Limits {
                 lane: switches.effective("Lane", &lane),
-                device: switches.effective("Device", &caller.claim),
+                device: switches.effective("Device", &me.claim),
             };
             let cmd = LeaseCmd::Acquire {
                 lane,
                 item: item.clone(),
-                holder: caller.claim.clone(),
+                holder: me.claim.clone(),
                 ttl,
                 limits,
             };
@@ -99,7 +134,7 @@ async fn run(
         Command::TaskRelease { item } => {
             let cmd = LeaseCmd::ReleaseItem {
                 item: item.clone(),
-                holder: caller.claim.clone(),
+                holder: me.claim.clone(),
             };
             match call::leases(env, &cmd).await? {
                 LeaseReply::Lease(_) => Ok(format!("released {}#{}", item.repo, item.number)),

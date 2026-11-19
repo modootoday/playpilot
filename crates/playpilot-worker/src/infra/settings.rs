@@ -7,6 +7,8 @@ use crate::domain::config::Compiled;
 use crate::domain::identity::IdentityMap;
 use crate::domain::node::DEFAULT_OFFLINE_AFTER;
 use crate::domain::ops::{OpsTable, Switches};
+use crate::domain::token::{TokenMap, directory};
+use crate::domain::wake::WakeMap;
 
 /// JSON map from Access client id to actor and claim id.
 pub const IDENTITIES: &str = "PLAYPILOT_IDENTITIES";
@@ -14,6 +16,10 @@ pub const IDENTITIES: &str = "PLAYPILOT_IDENTITIES";
 pub const CONFIG: &str = "PLAYPILOT_CONFIG";
 /// Worker-side narrow-only ops, keyed `Kind/name`.
 pub const OPS: &str = "PLAYPILOT_OPS";
+/// JSON map from the SHA-256 of a `/mcp` bearer token to its actors.
+pub const MCP_TOKENS: &str = "PLAYPILOT_MCP_TOKENS";
+/// JSON map from actor to the routine fired when it gets mail.
+pub const WAKE: &str = "PLAYPILOT_WAKE";
 /// Minutes without a heartbeat before a node is offline.
 pub const OFFLINE_MINUTES: &str = "PLAYPILOT_OFFLINE_MINUTES";
 
@@ -28,6 +34,20 @@ fn text(env: &Env, name: &str) -> Option<String> {
 
 pub fn identities(env: &Env) -> Result<IdentityMap, String> {
     IdentityMap::parse(&text(env, IDENTITIES).ok_or(format!("{IDENTITIES} is not set"))?)
+}
+
+pub fn tokens(env: &Env) -> Result<TokenMap, String> {
+    TokenMap::parse(&text(env, MCP_TOKENS).ok_or(format!("{MCP_TOKENS} is not set"))?)
+}
+
+/// Routines to fire on new mail; unset means no actor is woken.
+pub fn wake(env: &Env) -> Result<WakeMap, String> {
+    text(env, WAKE).map_or(Ok(WakeMap::default()), |t| WakeMap::parse(&t))
+}
+
+/// Broadcast directory: actors from the Access identities and the tokens.
+pub fn mail_directory(env: &Env) -> Vec<String> {
+    directory(identities(env).ok().as_ref(), tokens(env).ok().as_ref())
 }
 
 pub fn config(env: &Env) -> Result<Compiled, String> {
