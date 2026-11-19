@@ -36,3 +36,23 @@ The rendered hook pins the rev from `playpilot.lock`, takes the protected
 branches from the `Project` resource, reinstalls the CLI when the recorded rev
 differs, and blocks the tool call when no CLI can run. Other settings and
 hooks in the file are kept.
+
+The same configuration renders a session's scheduled-task prompt and a
+device's service files:
+
+```
+playpilot render prompt --session <name>
+playpilot render node --device <name> --workspace <dir> --out <dir>
+playpilot render node --device <name> --workspace <dir> --out <dir> --check
+```
+
+The prompt names the session (project, role, work) and points it at the
+repository's `AGENTS.md`, its automation rules and its fleet mailbox; it
+carries no policy. `render node` writes one file per entry in the device's
+`spec.runtimes`: `claude-rc@.service` for `wsl` (install it under
+`~/.config/systemd/user/`) and `claude-rc.xml` for `windows`, a Task Scheduler
+task that starts `rc-server.ps1` at logon for `%USERPROFILE%\fleet\<dir>` and
+restarts it on failure (`Register-ScheduledTask -TaskName claude-rc -Xml
+(Get-Content -Raw claude-rc.xml)`). `--workspace` is needed only for `windows`.
+The capacity in each file comes from the runtime entry. Without `--out` the
+files are printed; `--check` exits 1 when a file differs.
