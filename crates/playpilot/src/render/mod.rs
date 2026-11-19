@@ -2,13 +2,23 @@
 //!
 //! `settings` writes a project's guard hook, `prompt` prints a session's
 //! scheduled-task prompt, `node` writes a device's service files.
+//! `output` and `project` are shared with `sync` and `node install`.
 
 pub mod cli;
 pub mod node;
+pub mod output;
+pub mod project;
 pub mod prompt;
 pub mod settings;
 
-use crate::validate::Resource;
+use std::path::Path;
+
+use crate::validate::{self, Resource};
+
+/// Reads `<config>/fleet`, the resources of the fleet configuration repository.
+pub fn fleet(config: &Path) -> Result<Vec<Resource>, String> {
+    validate::read_dir(&config.join("fleet")).map_err(|e| e.join("\n"))
+}
 
 /// Finds the resource of `kind` named `name`.
 fn find<'a>(resources: &'a [Resource], kind: &str, name: &str) -> Result<&'a Resource, String> {

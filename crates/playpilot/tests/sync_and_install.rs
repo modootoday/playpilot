@@ -1,0 +1,145 @@
+//! `sync` and `node install` write paths, run as the built binary against a
+//! temporary directory. The install base is redirected through the variables
+//! the OS conventions use (`HOME`, `XDG_CONFIG_HOME`, `APPDATA`).
+
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
+
+const REV: &str = "0123456789abcdef0123456789abcdef01234567";
+
+struct Scratch(PathBuf);
+
+impl Scratch {
+    fn new(name: &str) -> Self {
+        let dir = std::env::temp_dir().join(format!("playpilot-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        Scratch(dir)
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn write(path: &Path, text: &str) {
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, text).unwrap();
+}
+
+fn fleet(root: &Path) -> PathBuf {
+    let config = root.join("config");
+    write(
+        &config.join("playpilot.lock"),
+        &format!("rev = \"{REV}\"\n"),
+    );
+    write(
+        &config.join("fleet").join("project.toml"),
+        "apiVersion = \"playpilot.io/v1\"\nkind = \"Project\"\n[metadata]\nname = \"example\"\n[spec]\nprotected = [\"main\"]\n",
+    );
+    write(
+        &config.join("fleet").join("device.toml"),
+        "apiVersion = \"playpilot.io/v1\"\nkind = \"Device\"\n[metadata]\nname = \"example-node\"\n[spec]\nruntimes = [{ type = \"wsl\", capacity = 2 }, { type = \"windows\", capacity = 1 }]\n",
+    );
+    config
+}
+
+fn playpilot(args: &[&str], base: &Path) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_playpilot"))
+        .args(args)
+        .env("HOME", base)
+        .env("XDG_CONFIG_HOME", base.join(".config"))
+        .env("APPDATA", base.join("AppData"))
+        .output()
+        .unwrap()
+}
+
+fn stdout(o: &Output) -> String {
+    String::from_utf8_lossy(&o.stdout).into_owned()
+}
+
+#[test]
+fn sync_checks_then_writes_the_project_files() {
+    let s = Scratch::new("sync");
+    let config = fleet(&s.0);
+    let repo = s.0.join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    let (c, r) = (config.to_str().unwrap(), repo.to_str().unwrap());
+    let base = ["--project", "example", "--config", c, "--repo", r];
+    let check: Vec<&str> = ["--check"].iter().chain(&base).copied().collect();
+
+    let stale = playpilot(&[&["sync"], &check[..]].concat(), &s.0);
+    assert_eq!(stale.status.code(), Some(1));
+    assert!(stdout(&stale).contains("settings.json is stale"));
+    assert!(!repo.join(".claude").join("settings.json").exists());
+
+    let wrote = playpilot(&[&["sync"], &base[..]].concat(), &s.0);
+    assert_eq!(wrote.status.code(), Some(0), "{}", stdout(&wrote));
+    let text = std::fs::read_to_string(repo.join(".claude").join("settings.json")).unwrap();
+    assert!(text.contains(REV));
+
+    let clean = playpilot(&[&["sync"], &check[..]].concat(), &s.0);
+    assert_eq!(clean.status.code(), Some(0));
+    assert!(stdout(&clean).contains("1 file(s) up to date"));
+
+    let usage = playpilot(&["sync", "--check"], &s.0);
+    assert_eq!(usage.status.code(), Some(64));
+}
+
+#[test]
+fn node_install_writes_once_and_refuses_local_edits() {
+    let s = Scratch::new("install");
+    let config = fleet(&s.0);
+    let c = config.to_str().unwrap();
+    let args = [
+        "node",
+        "install",
+        "--device",
+        "example-node",
+        "--config",
+        c,
+        "--workspace",
+        "example",
+    ];
+    let target = if cfg!(windows) {
+        s.0.join("AppData").join("fleet").join("claude-rc.xml")
+    } else {
+        s.0.join(".config")
+            .join("systemd")
+            .join("user")
+            .join("claude-rc@.service")
+    };
+
+    let dry = playpilot(&[&args[..], &["--dry-run"]].concat(), &s.0);
+    assert_eq!(dry.status.code(), Some(0));
+    assert!(stdout(&dry).contains("would be written"));
+    assert!(!target.exists());
+
+    let first = playpilot(&args, &s.0);
+    assert_eq!(first.status.code(), Some(0), "{}", stdout(&first));
+    let out = stdout(&first);
+    if cfg!(windows) {
+        assert!(out.contains("Register-ScheduledTask -TaskName claude-rc"));
+    } else {
+        assert!(out.contains("systemctl --user enable --now claude-rc@example"));
+    }
+    let rendered = std::fs::read_to_string(&target).unwrap();
+
+    let again = playpilot(&args, &s.0);
+    assert_eq!(again.status.code(), Some(0));
+    assert!(stdout(&again).contains("is up to date"));
+
+    std::fs::write(&target, "local edit\n").unwrap();
+    let refused = playpilot(&args, &s.0);
+    assert_eq!(refused.status.code(), Some(1));
+    assert_eq!(std::fs::read_to_string(&target).unwrap(), "local edit\n");
+
+    let forced = playpilot(&[&args[..], &["--force"]].concat(), &s.0);
+    assert_eq!(forced.status.code(), Some(0));
+    assert_eq!(std::fs::read_to_string(&target).unwrap(), rendered);
+
+    let usage = playpilot(&["node", "install", "--dry-run"], &s.0);
+    assert_eq!(usage.status.code(), Some(64));
+}

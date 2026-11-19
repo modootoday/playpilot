@@ -6,12 +6,14 @@
 mod claim;
 mod gh;
 mod history;
+mod install;
 mod mail;
 mod mcp;
 mod plan;
 mod policy;
 mod render;
 mod surface;
+mod sync;
 mod validate;
 
 use std::io::Read;
@@ -27,6 +29,10 @@ fn main() -> ExitCode {
         Some("surface-check") => surface_check(std::env::args().skip(2).collect()),
         Some("validate") => validate_dir(std::env::args().nth(2)),
         Some("render") => render::cli::main(std::env::args().skip(2).collect()),
+        Some("sync") => sync::main(std::env::args().skip(2).collect()),
+        Some("node") if std::env::args().nth(2).as_deref() == Some("install") => {
+            install::main(std::env::args().skip(3).collect())
+        }
         Some(v @ ("plan" | "whoami")) => plan_cmd(v, std::env::args().skip(2).collect()),
         Some("--version" | "-V") => {
             println!("playpilot {}", env!("CARGO_PKG_VERSION"));
@@ -44,6 +50,8 @@ fn main() -> ExitCode {
             eprintln!(
                 "       playpilot render <settings|prompt|node> ... (playpilot render --help)"
             );
+            eprintln!("       {}", sync::USAGE.trim_start_matches("usage: "));
+            eprintln!("       {}", install::USAGE.trim_start_matches("usage: "));
             eprintln!(
                 "       playpilot surface-check --range <base>..<head> [--text-env NAME]... [--deny-env NAME]"
             );

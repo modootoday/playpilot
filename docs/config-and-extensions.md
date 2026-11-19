@@ -176,3 +176,8 @@ idempotency key; a failed or `429` fire is logged and never fails the send.
 - `render`: writes `.claude/settings.json` (implemented: `render settings`, `render prompt`, `render node`), role files, systemd units,
   Task Scheduler XML and scheduled-task prompts from the config.
 - `whoami`: on a node, resolves its device id to roles, lanes and projects.
+- `sync --check` (implemented): lists every project-side file `render` would
+  produce that differs from the checkout (exit 1); `sync` writes them.
+- `node install` (implemented): puts `render node` output into the OS location
+  (systemd user unit, Task Scheduler XML) and prints, never runs, the enable
+  commands; `--dry-run` previews, `--force` replaces a file that differs.

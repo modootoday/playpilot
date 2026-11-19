@@ -56,3 +56,29 @@ restarts it on failure (`Register-ScheduledTask -TaskName claude-rc -Xml
 (Get-Content -Raw claude-rc.xml)`). `--workspace` is needed only for `windows`.
 The capacity in each file comes from the runtime entry. Without `--out` the
 files are printed; `--check` exits 1 when a file differs.
+
+To check or update every project-side file in one run (today the
+`.claude/settings.json` above), use `sync`:
+
+```
+playpilot sync --check --project <name> --repo <project checkout>
+playpilot sync --project <name> --repo <project checkout>
+```
+
+`--check` lists the stale files and exits 1; without it they are written.
+
+On the node itself, `node install` puts the service file for this platform
+where the service manager reads it: `claude-rc@.service` into
+`~/.config/systemd/user/` on Linux and WSL, `claude-rc.xml` into
+`%APPDATA%\fleet\` on Windows.
+
+```
+playpilot node install --device <name> --workspace <dir> --dry-run
+playpilot node install --device <name> --workspace <dir>
+```
+
+It never enables the service and never touches credentials. It prints the
+commands to run yourself (`systemctl --user daemon-reload` and
+`systemctl --user enable --now claude-rc@<dir>`, or `Register-ScheduledTask`).
+An identical file is left alone; a file that differs is refused unless you pass
+`--force`. `--dry-run` shows the target paths and contents without writing.

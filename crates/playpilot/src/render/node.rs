@@ -82,6 +82,11 @@ pub fn node_files(runtimes: &[Runtime], workspace: Option<&str>) -> Result<Vec<N
 fn windows_workspace(workspace: Option<&str>) -> Result<&str, String> {
     let w =
         workspace.ok_or("a windows runtime needs --workspace <dir under %USERPROFILE%\\fleet>")?;
+    plain_workspace(w)
+}
+
+/// A workspace directory name: plain, no drive or parent reference.
+pub fn plain_workspace(w: &str) -> Result<&str, String> {
     if super::is_plain(w) && !w.contains(':') && !w.starts_with('.') {
         Ok(w)
     } else {
