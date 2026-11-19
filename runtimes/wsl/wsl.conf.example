@@ -1,0 +1,6 @@
+# Copy to /etc/wsl.conf inside the distribution, then: wsl --shutdown
+[boot]
+systemd=true
+
+[interop]
+appendWindowsPath=false

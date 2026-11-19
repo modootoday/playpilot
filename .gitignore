@@ -1,0 +1,7 @@
+# Default deny: only tracked paths below are committed.
+/target/
+.claude/settings.local.json
+.agents/local/
+*.log
+.env
+.env.*

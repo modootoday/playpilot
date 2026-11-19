@@ -1,0 +1,17 @@
+# Remote Control server for one workspace directory under ~/fleet/<name>.
+[Unit]
+Description=Claude Code Remote Control server (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/fleet/%i
+Environment=PLAYPILOT_RUNTIME=wsl
+ExecStart=%h/.local/bin/claude remote-control --spawn worktree --capacity 4 --permission-mode auto --settings %h/.config/fleet/node.settings.json
+# Server mode exits after ~10 minutes without network; come back on our own.
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=default.target

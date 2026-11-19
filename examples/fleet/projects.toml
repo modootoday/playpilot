@@ -1,0 +1,18 @@
+apiVersion = "playpilot.io/v1"
+kind = "Project"
+[metadata]
+name = "kinekino"
+labels = { lang = "rust", ui = "webview2" }
+[spec]
+repo = { host = "github", slug = "modootoday/kinekino" }
+base = "main"
+protected = ["main"]
+merge = "merge"
+gates = [
+  { name = "fmt", run = "cargo fmt --check" },
+  { name = "test", run = "cargo test" },
+  { name = "clippy", run = "cargo clippy --all-targets -- -D warnings" },
+]
+lanes = ["heavy-build", "windows-run", "gui-check"]
+[spec.extensions."x-dependabot-holds"]   # plugin-owned fields live only under extensions
+windows-core = ">= 0.63"

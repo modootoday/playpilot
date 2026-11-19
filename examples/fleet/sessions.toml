@@ -1,0 +1,10 @@
+apiVersion = "playpilot.io/v1"
+kind = "Session"
+[metadata]
+name = "kinekino-slices"
+[spec]
+runtime = "claude-cloud"
+project = "kinekino"
+role = "implementer"
+trigger = { schedule = "CRON_TZ=Asia/Seoul 17 */3 * * *" }
+work = "roadmap"             # roadmap | bugs | public-surface | lane:<name>

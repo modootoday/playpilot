@@ -1,0 +1,11 @@
+[package]
+name = "playpilot"
+version = "0.1.0"
+description = "Run Claude Code agents across devices, cloud sessions and containers under one set of rules"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json = "1"
+shlex = "1"

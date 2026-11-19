@@ -1,0 +1,27 @@
+name: Node run request
+description: Ask a fleet node to run a command and report back
+labels: []
+body:
+  - type: dropdown
+    id: lane
+    attributes:
+      label: Lane
+      options: [needs-heavy-build, needs-windows-run, needs-gui-check]
+    validations: {required: true}
+  - type: input
+    id: target
+    attributes:
+      label: Repository and pull request or commit
+      placeholder: owner/repo#123 or owner/repo@sha
+    validations: {required: true}
+  - type: textarea
+    id: command
+    attributes:
+      label: Exact command(s)
+      render: text
+    validations: {required: true}
+  - type: textarea
+    id: pass
+    attributes:
+      label: Pass criteria
+    validations: {required: true}

@@ -1,0 +1,9 @@
+apiVersion = "playpilot.io/v1"
+kind = "Lane"
+[metadata]
+name = "windows-run"
+[spec]
+label = "needs-windows-run"
+requires = ["os:windows", "toolchain:msvc"]
+timeout = "60m"
+source = "github-labels"    # or a plugin lane source, e.g. "plugin:linear"

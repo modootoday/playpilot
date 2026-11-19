@@ -1,0 +1,13 @@
+apiVersion = "playpilot.io/v1"
+kind = "Device"
+[metadata]
+name = "oss-desktop-2"
+annotations = { remoteControlTitle = "OSS Desktop #2" }
+[spec]
+capabilities = ["os:linux", "os:windows", "toolchain:msvc", "build:heavy"]
+roles = ["heavy-builder", "windows-validator"]
+primaryLanes = ["heavy-build"]
+runtimes = [
+  { type = "wsl", capacity = 4 },
+  { type = "windows", capacity = 1 },
+]

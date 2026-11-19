@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "defaultMode": "auto",
+    "disableBypassPermissionsMode": "disable"
+  },
+  "autoMode": {
+    "environment": [
+      "$defaults",
+      "Organization: personal open-source maintenance fleet. Primary use: software development on public repositories",
+      "Source control: github.com/modootoday and all repos under it. Repository visibility: public",
+      "Host containment: a dedicated fleet node (WSL distribution, Windows user account, or Cloudflare container) used only for this fleet; GitHub access is the node's own gh login",
+      "Secrets management: secret values are entered only by the owner in GitHub or the environment's secure form; agents never read, print, or set them"
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Changing .github/workflows, .github/rulesets, .github/settings or a repository's shared automation rules needs the needs-human label on the pull request"
+    ],
+    "hard_deny": [
+      "$defaults",
+      "Never push to a protected branch, force-push, rewrite pushed history, create tags or releases, approve or directly merge a pull request, or change rulesets or secrets",
+      "Never put personal email addresses, private host values, local paths or private terms into commits, code, issues or pull requests of public repositories"
+    ]
+  }
+}

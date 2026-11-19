@@ -1,0 +1,8 @@
+apiVersion = "playpilot.io/v1"
+kind = "PermissionProfile"
+[metadata]
+name = "readonly"
+[spec]
+extends = "baseline"         # profiles form a chain that can only narrow
+defaultMode = "auto"
+denyExtra = ["Edit", "Write", "Bash(git push *)", "Bash(gh pr create *)"]

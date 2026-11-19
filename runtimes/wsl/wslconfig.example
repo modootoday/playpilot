@@ -1,0 +1,13 @@
+# Copy to %UserProfile%\.wslconfig and size it to the device (see devices/*.toml).
+[wsl2]
+memory=24GB
+processors=12
+swap=8GB
+
+[general]
+# Keep the distro (and the Remote Control server) running when no shell is open.
+instanceIdleTimeout=-1
+
+[experimental]
+sparseVhd=true
+autoMemoryReclaim=gradual

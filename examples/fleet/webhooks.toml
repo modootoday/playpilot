@@ -1,0 +1,10 @@
+apiVersion = "playpilot.io/v1"
+kind = "Webhook"
+[metadata]
+name = "owner-notify"
+[spec]
+direction = "outbound"
+url = { secretRef = "PLAYPILOT_WEBHOOK_OWNER_URL" }      # values never in config
+signing = { scheme = "standard-webhooks", secretRef = "PLAYPILOT_WEBHOOK_OWNER_SECRET" }
+format = "cloudevents/1.0"
+events = ["run.finished", "claim.stale", "node.offline", "config.applied"]

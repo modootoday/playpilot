@@ -1,0 +1,18 @@
+apiVersion = "playpilot.io/v1"
+kind = "Fleet"
+[metadata]
+name = "modootoday"
+[spec]
+canon = "automation-common-rules v1.2"   # this config may narrow it, never loosen it
+backends = { config = "git", queue = "github-labels", events = "webhooks" }   # phase B: queue = "worker"
+claims = { staleAfter = "6h", fallbackAfter = "2h" }
+
+[spec.domain]                 # operations domain of this deployment (Cloudflare zone)
+root = "playpilot.io"
+site = "https://playpilot.io"            # public read-only fleet status
+api = "https://api.playpilot.io/v1"      # Worker API (Access service tokens)
+hooks = "https://hooks.playpilot.io"     # inbound webhook ingress
+ops = "https://ops.playpilot.io"         # owner console (Access, owner only)
+get = "https://get.playpilot.io"         # install redirects to pinned GitHub Releases
+plugins = "https://plugins.playpilot.io/index.json"   # pinned plugin index
+security = "security@playpilot.io"       # Email Routing, used in SECURITY.md

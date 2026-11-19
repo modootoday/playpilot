@@ -1,0 +1,39 @@
+// Plugin interfaces for playpilot. Versioned with the package; breaking
+// changes bump the major version and both majors stay supported for one release.
+package playpilot:fleet@1.0.0;
+
+interface types {
+  record work-item { id: string, lane: string, title: string, url: string, labels: list<string> }
+  record event { id: string, %type: string, source: string, time: string, data-json: string }
+  variant verdict { allow, refuse(string) }
+}
+
+/// New work sources (Linear, Jira, a CSV...). Read-only towards the fleet.
+interface lane-source {
+  use types.{work-item};
+  list-ready: func(lane: string) -> result<list<work-item>, string>;
+  report: func(item-id: string, outcome-json: string) -> result<_, string>;
+}
+
+/// Extra guard rules. Can only refuse; the core guard has already run.
+interface policy-check {
+  use types.{verdict};
+  check-command: func(tool: string, command: string) -> verdict;
+}
+
+/// Event consumers (Slack, Discord, metrics...).
+interface event-sink {
+  use types.{event};
+  deliver: func(e: event) -> result<_, string>;
+}
+
+/// New executors (another container platform, a CI provider...).
+interface runtime {
+  start-job: func(spec-json: string) -> result<string, string>;
+  job-status: func(job-id: string) -> result<string, string>;
+}
+
+world lane-source-plugin { export lane-source; }
+world policy-plugin { export policy-check; }
+world sink-plugin { export event-sink; }
+world runtime-plugin { export runtime; }

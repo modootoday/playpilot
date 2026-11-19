@@ -1,0 +1,41 @@
+name: ci
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 # pin to a full SHA before enabling the ruleset
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: python3 -c "import json,sys;[json.load(open(f)) for f in sys.argv[1:]]" .claude/settings.json profiles/node.settings.json .github/labels.json
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4 # pin to a full SHA before enabling the ruleset
+      - run: cargo test --locked
+  history:
+    name: History
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 # pin to a full SHA before enabling the ruleset
+        with:
+          fetch-depth: 0
+      - run: cargo build --locked --release
+      - env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: ./target/release/playpilot history-check --method squash --range "$BASE..$HEAD" --title "$TITLE"

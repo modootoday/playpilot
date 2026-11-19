@@ -1,0 +1,10 @@
+apiVersion = "playpilot.io/v1"
+kind = "Role"
+[metadata]
+name = "heavy-builder"
+[spec]
+agent = ".agents/agents/heavy-builder.md"
+profile = "node"
+runtimes = ["wsl", "cf-container"]
+lanes = ["heavy-build"]
+mayOpenPullRequest = false
