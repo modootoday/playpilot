@@ -14,7 +14,7 @@ Access, R2 and Email Routing work without moving DNS.
 
 | Host | Serves | Access | Backed by |
 | --- | --- | --- | --- |
-| `playpilot.io` | Public fleet status: projects, lanes, open claims, last run per lane, links to PRs. Static, rebuilt from GitHub data | Public, read-only | Worker static assets |
+| `playpilot.io` | Product docs and public fleet status, built from `docs/` | Public, read-only | GitHub Pages (main branch, `/docs`, DNS only on Cloudflare) |
 | `api.playpilot.io` | `/v1/config`, `/v1/leases`, `/v1/nodes/{id}/heartbeat`, `/v1/events`, `/v1/state` | Access service token per node; `GET /v1/state` public subset | Worker + Durable Objects |
 | `hooks.playpilot.io` | Inbound webhooks (GitHub App, plugin sources). Verify signature → CloudEvent → fan out | Signature required; WAF rate limit | Worker + Queue |
 | `ops.playpilot.io` | Owner console: pause/drain node or lane, lower capacity, view stale claims | Access, owner identity only | Worker |
