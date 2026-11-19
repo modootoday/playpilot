@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="playpilot">
+  <title>playpilot</title>
+  <defs>
+    <linearGradient id="pp-bg" x1="64" y1="32" x2="448" y2="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1F4482"/>
+      <stop offset="1" stop-color="#0A1630"/>
+    </linearGradient>
+    <linearGradient id="pp-wing" x1="140" y1="130" x2="400" y2="260" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E4ECFF"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#pp-bg)"/>
+  <g transform="translate(-8 6)">
+    <path d="M392 250 136 128l62 122Z" fill="url(#pp-wing)"/>
+    <path d="M392 250H198l-62 122Z" fill="#A9C2F2"/>
+    <path d="M392 250H198l42 32Z" fill="#7C9CDA"/>
+    <circle cx="392" cy="250" r="16" fill="#F26B3A"/>
+  </g>
+</svg>
