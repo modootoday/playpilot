@@ -1,3 +1,5 @@
+---
+---
 # Operations domain: playpilot.io
 
 The product keeps its name (`playpilot`, schema group `playpilot.io`).

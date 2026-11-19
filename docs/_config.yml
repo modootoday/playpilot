@@ -1,0 +1,20 @@
+title: playpilot
+description: Run Claude Code agents across your devices, cloud sessions and containers under one set of rules.
+lang: en
+url: https://playpilot.io
+baseurl: ""
+theme: jekyll-theme-modootoday
+plugins: [jekyll-optional-front-matter, jekyll-titles-from-headings, jekyll-sitemap, jekyll-relative-links]
+relative_links: {collections: true}
+markdown: kramdown
+kramdown: {input: GFM, syntax_highlighter: rouge}
+sass: {style: compressed, silence_deprecations: [import, global-builtin]}
+permalink: pretty
+exclude: [Gemfile, Gemfile.lock, vendor, .bundle]
+modootoday:
+  heading_anchors: true
+  logo: /assets/playpilot/favicon.svg
+  csp: strict
+  edit_url: https://github.com/modootoday/playpilot/edit/main/docs/
+defaults:
+  - {scope: {path: ""}, values: {layout: doc}}
