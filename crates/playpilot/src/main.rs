@@ -4,6 +4,7 @@
 //! blocks it and the stderr text is shown to Claude.
 
 mod history;
+mod mail;
 mod policy;
 mod surface;
 mod validate;
@@ -14,6 +15,7 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     match std::env::args().nth(1).as_deref() {
         Some("guard") => guard(),
+        Some("mail") => mail::cli::main(std::env::args().skip(2).collect()),
         Some("history-check") => history_check(std::env::args().skip(2).collect()),
         Some("surface-check") => surface_check(std::env::args().skip(2).collect()),
         Some("validate") => validate_dir(std::env::args().nth(2)),
@@ -23,6 +25,7 @@ fn main() -> ExitCode {
         }
         _ => {
             eprintln!("usage: playpilot guard");
+            eprintln!("       playpilot mail <send|inbox|read|ack> ... (playpilot mail --help)");
             eprintln!("       playpilot validate <fleet-dir>");
             eprintln!(
                 "       playpilot surface-check --range <base>..<head> [--text-env NAME]... [--deny-env NAME]"
