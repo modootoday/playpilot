@@ -1033,3 +1033,78 @@ mod plan_rules {
         assert!(whoami(&fleet(), "nope").is_err());
     }
 }
+
+mod schema_files {
+    use std::path::{Path, PathBuf};
+
+    use serde_json::Value;
+
+    use crate::validate::{API_VERSION, KINDS, parse};
+
+    const RESOURCE_SCHEMA: &str = include_str!("../../../schemas/playpilot.io-v1.schema.json");
+    const WORKER_API: &str = include_str!("../../../schemas/worker.v1.openapi.yaml");
+
+    fn example_files(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                example_files(&path, out);
+            } else if path.extension().is_some_and(|e| e == "toml") {
+                out.push(path);
+            }
+        }
+    }
+
+    #[test]
+    fn every_example_resource_parses() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+        let mut files = Vec::new();
+        example_files(&root, &mut files);
+        assert!(!files.is_empty(), "no examples under {}", root.display());
+        for f in files {
+            let text = std::fs::read_to_string(&f).unwrap();
+            parse(&f.display().to_string(), &text).unwrap_or_else(|e| panic!("{e}"));
+        }
+    }
+
+    #[test]
+    fn resource_schema_names_every_kind() {
+        let s: Value = serde_json::from_str(RESOURCE_SCHEMA).expect("schema is JSON");
+        assert_eq!(s["$schema"], "https://json-schema.org/draft/2020-12/schema");
+        assert_eq!(s["properties"]["apiVersion"]["const"], API_VERSION);
+        let listed: Vec<&str> = s["properties"]["kind"]["enum"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        assert_eq!(listed, KINDS);
+        let branches = s["allOf"].as_array().unwrap();
+        for kind in KINDS {
+            let rule = branches
+                .iter()
+                .find(|b| b["if"]["properties"]["kind"]["const"] == kind)
+                .unwrap_or_else(|| panic!("no spec rule for {kind}"));
+            let target = rule["then"]["properties"]["spec"]["$ref"].as_str().unwrap();
+            let def = target.strip_prefix("#/$defs/").unwrap();
+            assert!(s["$defs"][def].is_object(), "{kind}: missing {target}");
+        }
+    }
+
+    #[test]
+    fn worker_api_lists_the_documented_paths() {
+        assert!(WORKER_API.starts_with("openapi: 3.1."));
+        for needle in [
+            "/v1/config:",
+            "/v1/leases:",
+            "/v1/leases/{id}:",
+            "/v1/nodes/{id}/heartbeat:",
+            "/v1/events:",
+            "/v1/state:",
+            "CF-Access-Client-Id",
+            "CF-Access-Client-Secret",
+        ] {
+            assert!(WORKER_API.contains(needle), "missing {needle}");
+        }
+    }
+}

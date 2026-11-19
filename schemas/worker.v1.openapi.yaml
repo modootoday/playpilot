@@ -1,0 +1,401 @@
+openapi: 3.1.0
+info:
+  title: playpilot Worker API
+  version: 1.0.0
+  description: |
+    Phase B of central management (docs/config-and-extensions.md, section 5).
+    Git stays the source of configuration; the Worker serves the compiled
+    config, holds atomic lane leases, records heartbeats and fans out events.
+    Every call except the public state subset needs a Cloudflare Access
+    service token, one per node. Node ids are opaque and never name a device.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: https://api.example.invalid
+security:
+  - cfAccessClientId: []
+    cfAccessClientSecret: []
+paths:
+  /v1/config:
+    get:
+      operationId: getConfig
+      summary: Compiled fleet configuration at the pinned ref
+      description: Nodes fall back to reading Git when the Worker is unreachable.
+      parameters:
+        - name: If-None-Match
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The compiled configuration.
+          headers:
+            ETag:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompiledConfig'
+        '304':
+          description: Unchanged since the given ETag.
+          headers:
+            ETag:
+              required: true
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/leases:
+    post:
+      operationId: createLease
+      summary: Claim a lane item atomically
+      description: |
+        A Durable Object lease with a TTL. The lease is mirrored to the
+        `claimed` label and a claim comment on the item.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaseRequest'
+      responses:
+        '201':
+          description: Lease granted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lease'
+        '409':
+          description: The item already has an open lease.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/leases/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      operationId: releaseLease
+      summary: Release a lease held by the caller
+      responses:
+        '204':
+          description: Released.
+        '403':
+          description: The lease belongs to another holder.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/nodes/{id}/heartbeat:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: The node's opaque claim id.
+        schema:
+          $ref: '#/components/schemas/NodeId'
+    post:
+      operationId: heartbeat
+      summary: Report node liveness and capacity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Heartbeat'
+      responses:
+        '200':
+          description: Accepted; returns the narrow-only switches now in effect for the node.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeartbeatAck'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/events:
+    post:
+      operationId: postEvents
+      summary: Submit CloudEvents 1.0 events
+      description: |
+        Structured JSON mode, single or batch. Idempotent by event id: a
+        repeated id is accepted and not delivered again. Events carry data,
+        never commands.
+      requestBody:
+        required: true
+        content:
+          application/cloudevents+json:
+            schema:
+              $ref: '#/components/schemas/CloudEvent'
+          application/cloudevents-batch+json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/CloudEvent'
+      responses:
+        '202':
+          description: Accepted for fan-out.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/state:
+    get:
+      operationId: getState
+      summary: Public subset of live state
+      description: Node and lane status with counts only; no item titles, repositories or device names.
+      security: []
+      responses:
+        '200':
+          description: Current public state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicState'
+components:
+  securitySchemes:
+    cfAccessClientId:
+      type: apiKey
+      in: header
+      name: CF-Access-Client-Id
+      description: Cloudflare Access service token id (one per node).
+    cfAccessClientSecret:
+      type: apiKey
+      in: header
+      name: CF-Access-Client-Secret
+      description: Cloudflare Access service token secret; sent together with the id.
+  responses:
+    BadRequest:
+      description: The request does not match the schema.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: Missing or invalid service token.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: No such resource.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    NodeId:
+      type: string
+      pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+    Duration:
+      type: string
+      pattern: '^[0-9]+[smhd]$'
+    Ops:
+      description: Narrow-only switches; the effective value is the narrower of file and Worker.
+      type: object
+      properties:
+        paused:
+          type: boolean
+        capacity:
+          type: integer
+          minimum: 0
+    CompiledConfig:
+      type: object
+      required: [apiVersion, rev, resources]
+      properties:
+        apiVersion:
+          const: playpilot.io/v1
+        rev:
+          description: Full commit SHA of the configuration ref.
+          type: string
+          pattern: '^[0-9a-f]{40}$'
+        generatedAt:
+          type: string
+          format: date-time
+        resources:
+          type: array
+          items:
+            $ref: './playpilot.io-v1.schema.json'
+        ops:
+          description: Worker switches keyed by kind and name, e.g. Device/node-a.
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/Ops'
+    ItemRef:
+      type: object
+      required: [repo, number]
+      properties:
+        repo:
+          type: string
+          pattern: '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
+        number:
+          type: integer
+          minimum: 1
+    LeaseRequest:
+      type: object
+      required: [lane, item, holder]
+      additionalProperties: false
+      properties:
+        lane:
+          type: string
+        item:
+          $ref: '#/components/schemas/ItemRef'
+        holder:
+          $ref: '#/components/schemas/NodeId'
+        ttl:
+          $ref: '#/components/schemas/Duration'
+    Lease:
+      type: object
+      required: [id, lane, item, holder, createdAt, expiresAt]
+      properties:
+        id:
+          type: string
+        lane:
+          type: string
+        item:
+          $ref: '#/components/schemas/ItemRef'
+        holder:
+          $ref: '#/components/schemas/NodeId'
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+    Heartbeat:
+      type: object
+      required: [rev]
+      additionalProperties: false
+      properties:
+        rev:
+          description: Configuration rev the node is running.
+          type: string
+          pattern: '^[0-9a-f]{40}$'
+        lanes:
+          type: array
+          items:
+            type: string
+        runtimes:
+          type: array
+          items:
+            type: object
+            required: [type]
+            properties:
+              type:
+                type: string
+              capacity:
+                type: integer
+                minimum: 0
+              busy:
+                type: integer
+                minimum: 0
+        leases:
+          description: Ids of leases the node still holds; they are extended.
+          type: array
+          items:
+            type: string
+    HeartbeatAck:
+      type: object
+      required: [receivedAt]
+      properties:
+        receivedAt:
+          type: string
+          format: date-time
+        ops:
+          $ref: '#/components/schemas/Ops'
+        configEtag:
+          description: Current config ETag, so the node knows when to refetch.
+          type: string
+    CloudEvent:
+      type: object
+      required: [specversion, id, source, type]
+      properties:
+        specversion:
+          const: '1.0'
+        id:
+          type: string
+          minLength: 1
+        source:
+          type: string
+          format: uri-reference
+        type:
+          description: fleet.<noun>.<verb>, e.g. fleet.run.finished.
+          type: string
+          pattern: '^fleet\.[a-z]+(-[a-z]+)*\.[a-z]+(-[a-z]+)*$'
+        subject:
+          type: string
+        time:
+          type: string
+          format: date-time
+        datacontenttype:
+          type: string
+        dataschema:
+          type: string
+          format: uri
+        data: {}
+    PublicState:
+      type: object
+      required: [generatedAt, nodes, lanes]
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        nodes:
+          type: array
+          items:
+            type: object
+            required: [id, status]
+            properties:
+              id:
+                $ref: '#/components/schemas/NodeId'
+              status:
+                enum: [online, offline, paused]
+              lastSeen:
+                type: string
+                format: date-time
+        lanes:
+          type: array
+          items:
+            type: object
+            required: [name, queued, leased]
+            properties:
+              name:
+                type: string
+              paused:
+                type: boolean
+              queued:
+                type: integer
+                minimum: 0
+              leased:
+                type: integer
+                minimum: 0
+    Problem:
+      description: RFC 9457 problem details.
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string

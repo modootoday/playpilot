@@ -1,0 +1,390 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/modootoday/playpilot/blob/main/schemas/playpilot.io-v1.schema.json",
+  "title": "playpilot.io/v1 resource",
+  "description": "One fleet configuration resource (one per file; TOML, YAML or JSON). v1 is additive: unknown fields are errors except under spec.extensions.\"x-<plugin>\", which belong to the named plugin. Semantic checks (references, lane coverage, literal secrets) are done by `playpilot validate`.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "playpilot.io/v1" },
+    "kind": {
+      "enum": [
+        "Fleet",
+        "Environment",
+        "Project",
+        "Lane",
+        "Device",
+        "Role",
+        "PermissionProfile",
+        "Session",
+        "Webhook",
+        "Plugin"
+      ]
+    },
+    "metadata": { "$ref": "#/$defs/metadata" },
+    "spec": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "Fleet" } }, "required": ["kind"] },
+      "then": { "properties": { "spec": { "$ref": "#/$defs/fleetSpec" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "Environment" } }, "required": ["kind"] },
+      "then": { "properties": { "spec": { "$ref": "#/$defs/environmentSpec" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "Project" } }, "required": ["kind"] },
+      "then": { "properties": { "spec": { "$ref": "#/$defs/projectSpec" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "Lane" } }, "required": ["kind"] },
+      "then": { "properties": { "spec": { "$ref": "#/$defs/laneSpec" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "Device" } }, "required": ["kind"] },
+      "then": { "properties": { "spec": { "$ref": "#/$defs/deviceSpec" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "Role" } }, "required": ["kind"] },
+      "then": { "properties": { "spec": { "$ref": "#/$defs/roleSpec" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "PermissionProfile" } }, "required": ["kind"] },
+      "then": { "properties": { "spec": { "$ref": "#/$defs/permissionProfileSpec" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "Session" } }, "required": ["kind"] },
+      "then": { "properties": { "spec": { "$ref": "#/$defs/sessionSpec" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "Webhook" } }, "required": ["kind"] },
+      "then": { "properties": { "spec": { "$ref": "#/$defs/webhookSpec" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "Plugin" } }, "required": ["kind"] },
+      "then": { "properties": { "spec": { "$ref": "#/$defs/pluginSpec" } } }
+    }
+  ],
+  "$defs": {
+    "name": {
+      "description": "Lower-case words joined by hyphens.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "names": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/name" },
+      "uniqueItems": true
+    },
+    "stringMap": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "labels": { "$ref": "#/$defs/stringMap" },
+        "annotations": { "$ref": "#/$defs/stringMap" }
+      }
+    },
+    "extensions": {
+      "description": "Plugin-owned fields, kept as-is and passed to the plugin named by the key.",
+      "type": "object",
+      "propertyNames": { "pattern": "^x-[a-z0-9]+(-[a-z0-9]+)*$" },
+      "additionalProperties": true
+    },
+    "duration": {
+      "description": "A whole number of seconds, minutes, hours or days, e.g. \"30m\" or \"6h\".",
+      "type": "string",
+      "pattern": "^[0-9]+[smhd]$"
+    },
+    "secretName": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$"
+    },
+    "secretRef": {
+      "description": "A reference to a secret by name. Secret values never appear in configuration.",
+      "type": "object",
+      "required": ["secretRef"],
+      "additionalProperties": false,
+      "properties": { "secretRef": { "$ref": "#/$defs/secretName" } }
+    },
+    "runtimeType": {
+      "anyOf": [
+        { "enum": ["wsl", "windows", "claude-cloud", "cf-container"] },
+        { "type": "string", "pattern": "^plugin:[a-z0-9]+(-[a-z0-9]+)*$" }
+      ]
+    },
+    "ops": {
+      "description": "Narrow-only runtime switches. A Worker may narrow them further; the effective value is the narrower one.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "paused": { "type": "boolean" },
+        "capacity": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "fleetSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "canon": { "description": "The common rules this fleet follows; config may narrow them, never loosen them.", "type": "string" },
+        "backends": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "config": { "enum": ["git", "worker"] },
+            "queue": { "anyOf": [{ "enum": ["github-labels", "worker"] }, { "type": "string", "pattern": "^plugin:[a-z0-9]+(-[a-z0-9]+)*$" }] },
+            "events": { "enum": ["webhooks", "worker"] }
+          }
+        },
+        "claims": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "staleAfter": { "$ref": "#/$defs/duration" },
+            "fallbackAfter": { "$ref": "#/$defs/duration" }
+          }
+        },
+        "domain": {
+          "description": "This deployment's own domain names.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "root": { "type": "string", "format": "hostname" },
+            "site": { "type": "string", "format": "uri" },
+            "api": { "type": "string", "format": "uri" },
+            "hooks": { "type": "string", "format": "uri" }
+          }
+        },
+        "ops": { "$ref": "#/$defs/ops" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "environmentSpec": {
+      "description": "Reserved kind; its fields are not documented yet, so any spec object is accepted.",
+      "type": "object",
+      "properties": { "extensions": { "$ref": "#/$defs/extensions" } }
+    },
+    "projectSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repo": {
+          "type": "object",
+          "required": ["host", "slug"],
+          "additionalProperties": false,
+          "properties": {
+            "host": { "enum": ["github", "gitlab", "forgejo"] },
+            "slug": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" }
+          }
+        },
+        "base": { "type": "string", "minLength": 1 },
+        "protected": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9/_.-]+$" },
+          "uniqueItems": true
+        },
+        "merge": { "enum": ["squash", "merge"] },
+        "lanes": { "$ref": "#/$defs/names" },
+        "gates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "run"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "$ref": "#/$defs/name" },
+              "run": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "ops": { "$ref": "#/$defs/ops" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "laneSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "minLength": 1 },
+        "requires": {
+          "description": "Capabilities a device must have to serve this lane.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "timeout": { "$ref": "#/$defs/duration" },
+        "source": {
+          "anyOf": [
+            { "enum": ["github-labels", "worker"] },
+            { "type": "string", "pattern": "^plugin:[a-z0-9]+(-[a-z0-9]+)*$" }
+          ]
+        },
+        "ops": { "$ref": "#/$defs/ops" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "deviceSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "roles": { "$ref": "#/$defs/names" },
+        "primaryLanes": { "$ref": "#/$defs/names" },
+        "runtimes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type"],
+            "additionalProperties": false,
+            "properties": {
+              "type": { "$ref": "#/$defs/runtimeType" },
+              "capacity": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "workspace": { "description": "Where the node keeps its own clones.", "type": "string", "minLength": 1 },
+        "claimId": {
+          "description": "Opaque id used in claim comments; it never names the device.",
+          "$ref": "#/$defs/name"
+        },
+        "ops": { "$ref": "#/$defs/ops" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "roleSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "agent": { "type": "string", "minLength": 1 },
+        "profile": { "$ref": "#/$defs/name" },
+        "runtimes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/runtimeType" },
+          "uniqueItems": true
+        },
+        "lanes": { "$ref": "#/$defs/names" },
+        "mayOpenPullRequest": { "type": "boolean" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "permissionProfileSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "extends": { "description": "Parent profile; profiles form a chain that can only narrow.", "$ref": "#/$defs/name" },
+        "defaultMode": { "type": "string", "minLength": 1 },
+        "denyExtra": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "sessionSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "runtime": { "$ref": "#/$defs/runtimeType" },
+        "project": { "$ref": "#/$defs/name" },
+        "role": { "$ref": "#/$defs/name" },
+        "trigger": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schedule": { "description": "Five-field cron expression.", "type": "string", "minLength": 9 }
+          }
+        },
+        "work": {
+          "type": "string",
+          "pattern": "^(roadmap|bugs|public-surface|lane:[a-z0-9]+(-[a-z0-9]+)*)$"
+        },
+        "ops": { "$ref": "#/$defs/ops" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "webhookSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "direction": { "enum": ["outbound", "inbound"] },
+        "url": {
+          "anyOf": [
+            { "$ref": "#/$defs/secretRef" },
+            { "type": "string", "format": "uri", "pattern": "^https://" }
+          ]
+        },
+        "signing": {
+          "type": "object",
+          "required": ["scheme", "secretRef"],
+          "additionalProperties": false,
+          "properties": {
+            "scheme": { "enum": ["standard-webhooks"] },
+            "secretRef": { "$ref": "#/$defs/secretName" }
+          }
+        },
+        "format": { "const": "cloudevents/1.0" },
+        "events": {
+          "description": "Event types without the fleet. prefix, e.g. run.finished.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z]+(-[a-z]+)*(\\.[a-z]+(-[a-z]+)*)+$" },
+          "uniqueItems": true
+        },
+        "ops": { "$ref": "#/$defs/ops" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "pluginSpec": {
+      "type": "object",
+      "required": ["kind", "interface", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["wasm-component", "process"] },
+        "interface": {
+          "description": "A WIT interface from schemas/playpilot-plugin.wit.",
+          "type": "string",
+          "pattern": "^playpilot:fleet/[a-z0-9]+(-[a-z0-9]+)*@[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "source": {
+          "description": "Pinned by URL and SHA-256.",
+          "type": "object",
+          "required": ["url", "sha256"],
+          "additionalProperties": false,
+          "properties": {
+            "url": { "type": "string", "format": "uri", "pattern": "^https://" },
+            "sha256": { "type": "string", "minLength": 1 }
+          }
+        },
+        "grants": {
+          "description": "Everything the plugin may reach; nothing else is granted.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "network": {
+              "type": "array",
+              "items": { "type": "string", "format": "hostname" },
+              "uniqueItems": true
+            },
+            "secrets": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/secretName" },
+              "uniqueItems": true
+            }
+          }
+        },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    }
+  }
+}
