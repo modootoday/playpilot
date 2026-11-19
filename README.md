@@ -10,6 +10,7 @@ cloud sessions and Cloudflare containers under one set of rules.
 - `devices/`: one manifest per physical device
 - `runtimes/{wsl,windows,claude-cloud,cf-container}`: bootstrap per runtime
 - `docs/architecture.md`: the design
+- `docs/guides/cli.md`: CLI reference (every `playpilot` subcommand)
 
 Quick start (WSL): clone to `~/fleet/playpilot`, run
 `runtimes/wsl/bootstrap.sh`, then follow its printed owner steps.
