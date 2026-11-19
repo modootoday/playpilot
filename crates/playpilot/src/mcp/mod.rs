@@ -11,17 +11,17 @@ pub mod tools;
 use std::io::{BufRead, Write};
 use std::process::ExitCode;
 
-use crate::mail::github::GitHub;
+use crate::mail::Backend;
 
 pub fn main() -> ExitCode {
-    let repo = std::env::var("PLAYPILOT_MAILBOX_REPO").ok();
+    let backend = Backend::from_env(std::env::var("PLAYPILOT_MAILBOX_REPO").ok());
     let actor = std::env::var("PLAYPILOT_ACTOR").ok();
-    let transport = repo.clone().map(|repo| GitHub { repo });
+    let transport = backend.as_ref().map(|b| b.open(actor.clone()));
     let tracker = crate::claim::github::GitHubTracker;
     let tools = tools::MailTools {
-        transport: transport.as_ref().map(|t| t as _),
+        transport: transport.as_deref(),
         actor,
-        repo,
+        mailbox: backend.map(|b| b.to_string()),
         tracker: Some(&tracker),
         claim_id: crate::claim::cli::env_id(),
     };

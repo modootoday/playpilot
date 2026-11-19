@@ -3,7 +3,7 @@
 use std::process::ExitCode;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::github::GitHub;
+use super::Backend;
 use super::message::Envelope;
 use super::transport::Receipt;
 
@@ -12,7 +12,9 @@ usage: playpilot mail send  --to <actor> --subject <text> [--re <ref>] (--body <
        playpilot mail inbox [--all] [--days <n>]
        playpilot mail read  <message-id>
        playpilot mail ack   <message-id>
-common: [--repo <owner/name>] (or PLAYPILOT_MAILBOX_REPO) [--as <actor>] (or PLAYPILOT_ACTOR)";
+common: [--repo <owner/name>] (or PLAYPILOT_MAILBOX_REPO) [--as <actor>] (or PLAYPILOT_ACTOR)
+mailbox: the Worker at PLAYPILOT_MAIL_URL (token from PLAYPILOT_MCP_TOKEN, if set) when set,
+         otherwise the GitHub repository";
 
 struct Args {
     verb: String,
@@ -85,11 +87,10 @@ fn read_body(a: &Args) -> Result<String, String> {
 
 fn run(args: Vec<String>) -> Result<(), String> {
     let a = parse(args)?;
-    let repo = a
-        .repo
-        .clone()
-        .ok_or("set --repo or PLAYPILOT_MAILBOX_REPO")?;
-    let t = GitHub { repo };
+    let backend = Backend::from_env(a.repo.clone())
+        .ok_or("set PLAYPILOT_MAIL_URL, or --repo / PLAYPILOT_MAILBOX_REPO")?;
+    let transport = backend.open(a.actor.clone());
+    let t = transport.as_ref();
     let actor = || a.actor.clone().ok_or("set --as or PLAYPILOT_ACTOR");
     match a.verb.as_str() {
         "send" => {
@@ -100,7 +101,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
                 re: a.re.clone(),
                 body: read_body(&a)?,
             };
-            for (mailbox, id) in super::send(&t, envelope)? {
+            for (mailbox, id) in super::send(t, envelope)? {
                 println!("sent {id} to {mailbox}");
             }
         }
@@ -110,7 +111,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
             let since = super::days_ago(now, a.days);
-            let messages = super::inbox(&t, &actor()?, a.all, &since)?;
+            let messages = super::inbox(t, &actor()?, a.all, &since)?;
             if messages.is_empty() {
                 println!("inbox: nothing new");
             }
@@ -144,7 +145,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
             } else {
                 Receipt::Ack
             };
-            super::mark(&t, id, kind)?;
+            super::mark(t, id, kind)?;
             println!("{} {id}", a.verb);
         }
         other => return Err(format!("unknown mail verb `{other}`")),

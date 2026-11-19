@@ -716,7 +716,7 @@ mod mcp_rules {
         let t = MailTools {
             transport: None,
             actor: None,
-            repo: None,
+            mailbox: None,
             tracker: None,
             claim_id: None,
         };
@@ -783,14 +783,14 @@ mod mcp_rules {
         let design = MailTools {
             transport: Some(&fake),
             actor: Some("design".into()),
-            repo: Some("o/r".into()),
+            mailbox: Some("github o/r".into()),
             tracker: None,
             claim_id: None,
         };
         let kinekino = MailTools {
             transport: Some(&fake),
             actor: Some("kinekino".into()),
-            repo: Some("o/r".into()),
+            mailbox: Some("github o/r".into()),
             tracker: None,
             claim_id: None,
         };
