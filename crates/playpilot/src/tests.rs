@@ -1108,3 +1108,174 @@ mod schema_files {
         }
     }
 }
+
+mod output_rules {
+    use crate::render::output::{Action, Mode, decide};
+
+    #[test]
+    fn check_reports_missing_and_different_files_as_stale() {
+        assert_eq!(decide(Some("a"), "a", Mode::Check), Action::UpToDate);
+        assert_eq!(decide(Some("b"), "a", Mode::Check), Action::Stale);
+        assert_eq!(decide(None, "a", Mode::Check), Action::Stale);
+    }
+
+    #[test]
+    fn write_replaces_whatever_differs() {
+        assert_eq!(decide(Some("a"), "a", Mode::Write), Action::UpToDate);
+        assert_eq!(decide(Some("b"), "a", Mode::Write), Action::Write);
+        assert_eq!(decide(None, "a", Mode::Write), Action::Write);
+    }
+
+    #[test]
+    fn install_refuses_a_different_file_unless_forced() {
+        let keep = Mode::Install { force: false };
+        let force = Mode::Install { force: true };
+        assert_eq!(decide(Some("a"), "a", keep), Action::UpToDate);
+        assert_eq!(decide(None, "a", keep), Action::Write);
+        assert_eq!(decide(Some("b"), "a", keep), Action::Refuse);
+        assert_eq!(decide(Some("b"), "a", force), Action::Write);
+        assert_eq!(decide(Some("a"), "a", force), Action::UpToDate);
+    }
+}
+
+mod sync_rules {
+    use crate::sync::parse;
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn parses_check_and_defaults() {
+        let a = parse(args(&["--check", "--project", "example"])).unwrap();
+        assert!(a.check);
+        assert_eq!(
+            (a.project.as_str(), a.config.as_str(), a.repo.as_str()),
+            ("example", ".", ".")
+        );
+        let b = parse(args(&["--project", "p", "--config", "cfg", "--repo", "r"])).unwrap();
+        assert!(!b.check);
+        assert_eq!((b.config.as_str(), b.repo.as_str()), ("cfg", "r"));
+    }
+
+    #[test]
+    fn rejects_usage_errors() {
+        assert!(parse(args(&[])).is_none());
+        assert!(parse(args(&["--check"])).is_none());
+        assert!(parse(args(&["--project"])).is_none());
+        assert!(parse(args(&["--project", "a", "--project", "b"])).is_none());
+        assert!(parse(args(&["--project", "a", "--check", "--check"])).is_none());
+        assert!(parse(args(&["--project", "a", "--out", "x"])).is_none());
+    }
+}
+
+mod install_rules {
+    use std::path::{Path, PathBuf};
+
+    use crate::install::{Platform, install_dir, next_steps, parse, select, targets};
+    use crate::render::node::{Runtime, WINDOWS_TASK, WSL_UNIT};
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    const BOTH: [Runtime; 2] = [
+        Runtime::Wsl { capacity: 2 },
+        Runtime::Windows { capacity: 1 },
+    ];
+
+    fn env(pairs: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> {
+        move |k| {
+            pairs
+                .iter()
+                .find(|(n, _)| *n == k)
+                .map(|(_, v)| v.to_string())
+        }
+    }
+
+    #[test]
+    fn parses_flags_and_rejects_usage_errors() {
+        let a = parse(args(&[
+            "--device",
+            "n",
+            "--dry-run",
+            "--force",
+            "--workspace",
+            "w",
+        ]))
+        .unwrap();
+        assert!(a.dry_run && a.force);
+        assert_eq!(a.workspace.as_deref(), Some("w"));
+        assert_eq!(a.config, ".");
+        assert!(parse(args(&["--dry-run"])).is_none());
+        assert!(parse(args(&["--device", "n", "--out", "x"])).is_none());
+        assert!(parse(args(&["--device", "n", "--device", "m"])).is_none());
+    }
+
+    #[test]
+    fn picks_the_runtime_this_platform_serves() {
+        assert_eq!(select(&BOTH, Platform::Linux).unwrap(), [BOTH[0]]);
+        assert_eq!(select(&BOTH, Platform::Windows).unwrap(), [BOTH[1]]);
+        assert!(select(&BOTH[..1], Platform::Windows).is_err());
+        assert!(select(&BOTH[1..], Platform::Linux).is_err());
+    }
+
+    #[test]
+    fn install_dir_follows_the_os_conventions() {
+        let home = PathBuf::from("/var/example");
+        assert_eq!(
+            install_dir(Platform::Linux, env(&[("HOME", "/var/example")])).unwrap(),
+            home.join(".config").join("systemd").join("user")
+        );
+        assert_eq!(
+            install_dir(
+                Platform::Linux,
+                env(&[("HOME", "/var/example"), ("XDG_CONFIG_HOME", "rel")])
+            )
+            .unwrap(),
+            home.join(".config").join("systemd").join("user")
+        );
+        assert!(install_dir(Platform::Linux, env(&[("HOME", "")])).is_err());
+        assert_eq!(
+            install_dir(Platform::Windows, env(&[("APPDATA", "appdata")])).unwrap(),
+            PathBuf::from("appdata").join("fleet")
+        );
+        assert!(install_dir(Platform::Windows, env(&[])).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_dir_honours_an_absolute_xdg_config_home() {
+        assert_eq!(
+            install_dir(
+                Platform::Linux,
+                env(&[("HOME", "/var/example"), ("XDG_CONFIG_HOME", "/cfg")])
+            )
+            .unwrap(),
+            Path::new("/cfg/systemd/user")
+        );
+    }
+
+    #[test]
+    fn targets_and_next_steps_never_run_anything() {
+        let dir = Path::new("base");
+        let linux = targets(&BOTH[..1], None, dir).unwrap();
+        assert_eq!(linux[0].path, dir.join(WSL_UNIT));
+        assert_eq!(
+            next_steps(Platform::Linux, &linux, Some("example")),
+            [
+                "systemctl --user daemon-reload",
+                "systemctl --user enable --now claude-rc@example"
+            ]
+        );
+        let windows = targets(&BOTH[1..], Some("example"), dir).unwrap();
+        assert_eq!(windows[0].path, dir.join(WINDOWS_TASK));
+        let steps = next_steps(Platform::Windows, &windows, Some("example"));
+        assert_eq!(steps.len(), 1);
+        assert!(
+            steps[0]
+                .starts_with("Register-ScheduledTask -TaskName claude-rc -Xml (Get-Content -Raw '")
+        );
+        assert!(targets(&BOTH[1..], None, dir).is_err());
+    }
+}

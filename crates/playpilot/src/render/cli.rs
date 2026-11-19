@@ -7,8 +7,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::ExitCode;
 
-use super::{node, prompt, settings as guard};
-use crate::validate::{self, Resource};
+use super::output::{self, Action, Mode, Output};
+use super::{node, project, prompt};
 
 pub const USAGE: &str = "\
 usage: playpilot render settings --project <name> [--config <dir>] [--repo <dir>] [--check]
@@ -92,25 +92,13 @@ fn report(result: Result<bool, String>) -> Result<bool, Usage> {
     })
 }
 
-fn fleet(config: &Path) -> Result<Vec<Resource>, String> {
-    validate::read_dir(&config.join("fleet")).map_err(|e| e.join("\n"))
-}
-
 /// `render settings`: writes or checks `<repo>/.claude/settings.json`.
 fn settings(a: &Args) -> Result<bool, Usage> {
     let project = a.get("--project").ok_or(Usage)?;
-    let target = Path::new(a.get("--repo").unwrap_or("."))
-        .join(".claude")
-        .join("settings.json");
+    let repo = Path::new(a.get("--repo").unwrap_or("."));
     report((|| {
-        let lock_path = a.config().join("playpilot.lock");
-        let lock = std::fs::read_to_string(&lock_path)
-            .map_err(|e| format!("{}: {e}", lock_path.display()))?;
-        let rev = guard::lock_rev(&lock)?;
-        let spec = guard::guard_spec(&fleet(a.config())?, project, rev)?;
-        let existing = std::fs::read_to_string(&target).ok();
-        let text = guard::merge_settings(existing.as_deref(), &spec)?;
-        sync_file(&target, &text, a.check, "render settings")
+        let out = project::settings(a.config(), project, repo)?;
+        sync_file(&out, a.check, "render settings")
     })())
 }
 
@@ -118,7 +106,7 @@ fn settings(a: &Args) -> Result<bool, Usage> {
 fn prompt_cmd(a: &Args) -> Result<bool, Usage> {
     let session = a.get("--session").ok_or(Usage)?;
     report((|| {
-        let spec = prompt::session_spec(&fleet(a.config())?, session)?;
+        let spec = prompt::session_spec(&super::fleet(a.config())?, session)?;
         print!("{}", prompt::prompt_text(&spec));
         Ok(true)
     })())
@@ -132,7 +120,7 @@ fn node_cmd(a: &Args) -> Result<bool, Usage> {
         return Err(Usage);
     }
     report((|| {
-        let runtimes = node::runtimes(&fleet(a.config())?, device)?;
+        let runtimes = node::runtimes(&super::fleet(a.config())?, device)?;
         let files = node::node_files(&runtimes, a.get("--workspace"))?;
         let Some(dir) = out else {
             for f in &files {
@@ -142,30 +130,28 @@ fn node_cmd(a: &Args) -> Result<bool, Usage> {
         };
         let mut ok = true;
         for f in &files {
-            ok &= sync_file(&dir.join(f.name), &f.text, a.check, "render node")?;
+            let out = Output {
+                path: dir.join(f.name),
+                text: f.text.clone(),
+            };
+            ok &= sync_file(&out, a.check, "render node")?;
         }
         Ok(ok)
     })())
 }
 
-/// Writes `text` to `target` unless it is already there. With `check`, only
-/// reports; returns false when the file is stale.
-fn sync_file(target: &Path, text: &str, check: bool, rerun: &str) -> Result<bool, String> {
-    if std::fs::read_to_string(target).ok().as_deref() == Some(text) {
-        println!("render: {} is up to date", target.display());
-        return Ok(true);
+/// Writes `out` unless it is already there. With `check`, only reports;
+/// returns false when the file is stale.
+fn sync_file(out: &Output, check: bool, rerun: &str) -> Result<bool, String> {
+    let mode = if check { Mode::Check } else { Mode::Write };
+    let shown = out.path.display();
+    match output::apply(out, mode)? {
+        Action::UpToDate => println!("render: {shown} is up to date"),
+        Action::Write => println!("render: wrote {shown}"),
+        Action::Stale | Action::Refuse => {
+            println!("render: {shown} is stale; run `playpilot {rerun}`");
+            return Ok(false);
+        }
     }
-    if check {
-        println!(
-            "render: {} is stale; run `playpilot {rerun}`",
-            target.display()
-        );
-        return Ok(false);
-    }
-    if let Some(dir) = target.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    }
-    std::fs::write(target, text).map_err(|e| format!("{}: {e}", target.display()))?;
-    println!("render: wrote {}", target.display());
     Ok(true)
 }
