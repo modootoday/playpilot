@@ -24,3 +24,11 @@ before starting (`.agents/rules/claims.md`).
 
 ## Verification
 `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test --locked`.
+
+## Project profile
+| Value | Setting |
+| --- | --- |
+| Merge method | squash, linear history |
+| Required checks | `lint`, `test (ubuntu-latest)`, `test (windows-latest)`, `History`, `Public surface`, `Secret scan` |
+| Deny-terms secret | `PLAYPILOT_DENY_TERMS`; owner recorded "no private terms" (2026-11-19), so it may be empty and the generic scans still run |
+| Identity cutoff (C10.5) | from the first commit |

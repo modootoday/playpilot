@@ -132,3 +132,53 @@ mod history_rules {
         assert_eq!(c[1].parents, 2);
     }
 }
+
+mod surface_rules {
+    use crate::surface::{Item, scan};
+
+    fn item(text: &str) -> Item {
+        Item {
+            location: "x".into(),
+            text: text.into(),
+        }
+    }
+
+    #[test]
+    fn deny_terms_report_index_not_term() {
+        let f = scan(
+            &[item("deploy to Secret-Host now")],
+            &["secret-host".into()],
+        );
+        assert_eq!(f, vec!["x: matches deny term #1".to_string()]);
+    }
+
+    #[test]
+    fn emails_and_paths() {
+        assert!(scan(&[item("author 1+o@users.noreply.github.com")], &[]).is_empty());
+        assert!(scan(&[item("mail security@playpilot.io or a@example.com")], &[]).is_empty());
+        assert_eq!(
+            scan(&[item(&format!("ping someone@{}", "mail.test"))], &[]).len(),
+            1
+        );
+        assert_eq!(
+            scan(&[item(&format!("see /home/{}/project", "alice"))], &[]).len(),
+            1
+        );
+        assert!(
+            scan(
+                &[item("clone into /home/user/repo or C:\\Users\\<you>")],
+                &[]
+            )
+            .is_empty()
+        );
+        assert_eq!(
+            scan(&[item(&format!("C:\\Users\\{}\\x", "bob"))], &[]).len(),
+            1
+        );
+    }
+
+    #[test]
+    fn empty_deny_list_is_allowed() {
+        assert!(scan(&[item("anything")], &["".into(), "  ".into()]).is_empty());
+    }
+}
