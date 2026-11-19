@@ -5,6 +5,7 @@
 
 mod history;
 mod mail;
+mod mcp;
 mod policy;
 mod render;
 mod surface;
@@ -17,6 +18,7 @@ fn main() -> ExitCode {
     match std::env::args().nth(1).as_deref() {
         Some("guard") => guard(),
         Some("mail") => mail::cli::main(std::env::args().skip(2).collect()),
+        Some("mcp") => mcp::main(),
         Some("history-check") => history_check(std::env::args().skip(2).collect()),
         Some("surface-check") => surface_check(std::env::args().skip(2).collect()),
         Some("validate") => validate_dir(std::env::args().nth(2)),
@@ -28,6 +30,9 @@ fn main() -> ExitCode {
         _ => {
             eprintln!("usage: playpilot guard");
             eprintln!("       playpilot mail <send|inbox|read|ack> ... (playpilot mail --help)");
+            eprintln!(
+                "       playpilot mcp   (MCP server on stdio; env PLAYPILOT_MAILBOX_REPO, PLAYPILOT_ACTOR)"
+            );
             eprintln!("       playpilot validate <fleet-dir>");
             eprintln!("       {RENDER_USAGE}");
             eprintln!(

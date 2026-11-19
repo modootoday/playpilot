@@ -343,9 +343,9 @@ mod mail_rules {
     }
 
     #[derive(Default)]
-    struct Fake {
-        boxes: RefCell<Vec<(String, Stored)>>,
-        actors: Vec<String>,
+    pub(super) struct Fake {
+        pub(super) boxes: RefCell<Vec<(String, Stored)>>,
+        pub(super) actors: Vec<String>,
     }
 
     impl Transport for Fake {
@@ -596,5 +596,125 @@ mod render_rules {
     fn refuses_settings_that_are_not_an_object() {
         assert!(merge_settings(Some("[]"), &spec()).is_err());
         assert!(merge_settings(Some("{"), &spec()).is_err());
+    }
+}
+
+mod mcp_rules {
+    use serde_json::{Value, json};
+
+    use super::mail_rules::Fake;
+    use crate::mcp::protocol::handle;
+    use crate::mcp::tools::MailTools;
+
+    fn call(tools: &MailTools, req: Value) -> Value {
+        serde_json::from_str(&handle(tools, &req.to_string()).unwrap()).unwrap()
+    }
+
+    fn tool(tools: &MailTools, name: &str, args: Value) -> (String, bool) {
+        let r = call(
+            tools,
+            json!({"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": {"name": name, "arguments": args}}),
+        );
+        let res = &r["result"];
+        (
+            res["content"][0]["text"].as_str().unwrap().to_string(),
+            res["isError"].as_bool().unwrap(),
+        )
+    }
+
+    #[test]
+    fn lifecycle_and_errors() {
+        let t = MailTools {
+            transport: None,
+            actor: None,
+            repo: None,
+        };
+        let init = call(
+            &t,
+            json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-03-26"}}),
+        );
+        assert_eq!(init["result"]["protocolVersion"], "2025-03-26");
+        assert_eq!(init["result"]["serverInfo"]["name"], "playpilot");
+        let other = call(
+            &t,
+            json!({"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {"protocolVersion": "1999-01-01"}}),
+        );
+        assert_eq!(other["result"]["protocolVersion"], "2025-06-18");
+        assert!(
+            handle(
+                &t,
+                r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#
+            )
+            .is_none()
+        );
+        assert_eq!(
+            call(&t, json!({"jsonrpc": "2.0", "id": 3, "method": "nope"}))["error"]["code"],
+            -32601
+        );
+        let parse: Value = serde_json::from_str(&handle(&t, "{").unwrap()).unwrap();
+        assert_eq!(parse["error"]["code"], -32700);
+        let names: Vec<_> = call(
+            &t,
+            json!({"jsonrpc": "2.0", "id": 4, "method": "tools/list"}),
+        )["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(
+            names,
+            ["mail_inbox", "mail_send", "mail_read", "mail_ack", "whoami"]
+        );
+        let (text, is_error) = tool(&t, "mail_inbox", json!({}));
+        assert!(is_error && text.contains("PLAYPILOT_MAILBOX_REPO"));
+        let unknown = call(
+            &t,
+            json!({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "rm"}}),
+        );
+        assert_eq!(unknown["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn mail_tools_send_list_and_ack_as_the_configured_actor() {
+        let fake = Fake {
+            actors: ["all", "design", "kinekino"].map(String::from).to_vec(),
+            ..Fake::default()
+        };
+        let design = MailTools {
+            transport: Some(&fake),
+            actor: Some("design".into()),
+            repo: Some("o/r".into()),
+        };
+        let kinekino = MailTools {
+            transport: Some(&fake),
+            actor: Some("kinekino".into()),
+            repo: Some("o/r".into()),
+        };
+        let (sent, err) = tool(
+            &design,
+            "mail_send",
+            json!({"to": "kinekino", "subject": "s", "body": "b", "from": "evil"}),
+        );
+        assert!(!err, "{sent}");
+        assert_eq!(sent, "sent 1 to kinekino");
+        let (inbox, _) = tool(&kinekino, "mail_inbox", json!({"days": 1}));
+        assert!(inbox.contains("from design to kinekino [new]"), "{inbox}");
+        assert_eq!(tool(&kinekino, "mail_ack", json!({"id": "1"})).0, "ack 1");
+        assert_eq!(
+            tool(&kinekino, "mail_inbox", json!({})).0,
+            "inbox: nothing new"
+        );
+        let (missing, err) = tool(
+            &design,
+            "mail_send",
+            json!({"to": "kinekino", "subject": " ", "body": "b"}),
+        );
+        assert!(err && missing.contains("subject"));
+        assert!(
+            tool(&design, "whoami", json!({}))
+                .0
+                .contains("actor: design")
+        );
     }
 }
