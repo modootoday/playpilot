@@ -1,7 +1,7 @@
 # playpilot: agent rules
 
 This file is the canon entry point. `CLAUDE.md` only points here. Topic rules
-are in `.agents/rules/`, role definitions in `.agents/agents/`.
+are in `.agents/rules/`; role definitions ship in the plugin, `plugin/agents/`.
 
 ## Always
 - Changes reach the default branch only through a pull request from a topic

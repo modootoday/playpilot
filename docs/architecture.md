@@ -23,7 +23,7 @@ applies everywhere; only the runtime layer differs.
 
 | Layer | Same everywhere? | Content |
 | --- | --- | --- |
-| Governance | yes | `AGENTS.md`, `.agents/rules`, `.agents/agents` |
+| Governance | yes | `AGENTS.md`, `.agents/rules`, plugin agents and skills (`plugin/`) |
 | Repo baseline | yes | `.claude/settings.json`: allow/deny rules and the `playpilot guard` hook |
 | Guard | yes | `crates/playpilot`, installed by every runtime bootstrap |
 | Node profile | not in cloud sessions | `profiles/node.settings.json` via `--settings`: auto mode and its rules |

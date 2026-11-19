@@ -13,3 +13,21 @@ cloud sessions and Cloudflare containers under one set of rules.
 
 Quick start (WSL): clone to `~/fleet/playpilot`, run
 `runtimes/wsl/bootstrap.sh`, then follow its printed owner steps.
+
+## Install (Claude Code plugin)
+
+```
+/plugin marketplace add modootoday/playpilot
+/plugin install playpilot@playpilot
+/playpilot:install
+```
+
+The plugin brings the guard hook, the fleet roles (`playpilot:implementer`,
+`playpilot:reviewer`, `playpilot:heavy-builder`, `playpilot:windows-validator`)
+and the `fleet-claim` skill. Cloud sessions do not load marketplace plugins;
+they get the same guard from the `.claude/settings.json` that
+`playpilot render` writes into each repository.
+
+playpilot's guard covers git and release boundaries. Do not enable another
+plugin that guards the same commands in the same session; two hooks on one
+command make refusals harder to read.

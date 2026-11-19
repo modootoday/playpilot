@@ -3,7 +3,7 @@ kind = "Role"
 [metadata]
 name = "windows-validator"
 [spec]
-agent = ".agents/agents/windows-validator.md"
+agent = "playpilot:windows-validator"
 profile = "node"
 runtimes = ["windows"]
 lanes = ["windows-run", "gui-check"]
