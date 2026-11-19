@@ -432,3 +432,28 @@ mod mail_rules {
         assert_eq!(days_ago(0, 0), "1970-01-01T00:00:00Z");
     }
 }
+
+#[test]
+fn refuses_bare_tag_names_in_push() {
+    for cmd in [
+        "git push origin v1.0.0",
+        "git push origin 1.2",
+        "git push origin v2.0.0-rc.1",
+        "git push origin v1.0.0:v1.0.0",
+        "arks push origin v0.3.0",
+    ] {
+        assert!(!allowed(cmd), "should refuse: {cmd}");
+    }
+    assert!(allowed("git push -u origin claude/v1.0-notes"));
+    assert!(allowed("git push -u origin claude/release-v1.0.0"));
+}
+
+#[test]
+fn refuses_pushing_a_known_local_tag() {
+    let p = Policy {
+        local_tags: vec!["stable".into()],
+        ..Policy::default()
+    };
+    assert!(decide(&p, &bash("git push origin stable")).is_err());
+    assert!(decide(&p, &bash("git push origin claude/stable-docs")).is_ok());
+}
