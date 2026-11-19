@@ -8,7 +8,7 @@ foreach ($tool in 'git', 'gh', 'cargo') {
 if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
     Invoke-RestMethod https://claude.ai/install.ps1 | Invoke-Expression
 }
-cargo install --locked --path (Join-Path $repo 'crates\playpilot guard')
+cargo install --locked --path (Join-Path $repo 'crates\playpilot')
 $cfg = Join-Path $env:APPDATA 'fleet'
 New-Item -ItemType Directory -Force $cfg | Out-Null
 Copy-Item (Join-Path $repo 'profiles\node.settings.json') (Join-Path $cfg 'node.settings.json') -Force
