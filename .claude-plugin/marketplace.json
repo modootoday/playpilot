@@ -1,0 +1,14 @@
+{
+  "name": "playpilot",
+  "owner": { "name": "modootoday" },
+  "metadata": { "description": "playpilot: Claude Code agents across devices, cloud sessions and containers under one set of rules." },
+  "plugins": [
+    {
+      "name": "playpilot",
+      "description": "Git and release guard, fleet roles and work claiming.",
+      "version": "0.1.0",
+      "author": { "name": "modootoday" },
+      "source": "./plugin"
+    }
+  ]
+}

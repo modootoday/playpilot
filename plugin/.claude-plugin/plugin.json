@@ -1,0 +1,12 @@
+{
+  "name": "playpilot",
+  "version": "0.1.0",
+  "description": "Run Claude Code agents across your devices under one set of rules: a git and release guard, fleet roles and work claiming.",
+  "author": {
+    "name": "modootoday"
+  },
+  "homepage": "https://playpilot.io",
+  "repository": "https://github.com/modootoday/playpilot",
+  "license": "Apache-2.0",
+  "hooks": "./hooks/hooks.json"
+}

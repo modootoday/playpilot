@@ -3,7 +3,7 @@ kind = "Role"
 [metadata]
 name = "heavy-builder"
 [spec]
-agent = ".agents/agents/heavy-builder.md"
+agent = "playpilot:heavy-builder"
 profile = "node"
 runtimes = ["wsl", "cf-container"]
 lanes = ["heavy-build"]

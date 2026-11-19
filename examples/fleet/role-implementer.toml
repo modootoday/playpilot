@@ -3,7 +3,7 @@ kind = "Role"
 [metadata]
 name = "implementer"
 [spec]
-agent = ".agents/agents/implementer.md"
+agent = "playpilot:implementer"
 profile = "node"
 runtimes = ["claude-cloud", "wsl"]
 mayOpenPullRequest = true
