@@ -3,14 +3,15 @@ description: Run Claude Code agents across your devices, cloud sessions and cont
 lang: en
 url: https://playpilot.io
 baseurl: ""
-theme: jekyll-theme-modootoday
-plugins: [jekyll-optional-front-matter, jekyll-titles-from-headings, jekyll-sitemap, jekyll-relative-links]
+# GitHub Pages standard build (main branch, /docs). Pin the theme to a release tag.
+remote_theme: modootoday/jekyll-theme-modootoday@v1.7.1
+plugins: [jekyll-remote-theme, jekyll-optional-front-matter, jekyll-titles-from-headings, jekyll-sitemap, jekyll-relative-links]
 relative_links: {collections: true}
 markdown: kramdown
 kramdown: {input: GFM, syntax_highlighter: rouge}
 sass: {style: compressed, silence_deprecations: [import, global-builtin]}
 permalink: pretty
-exclude: [Gemfile, Gemfile.lock, vendor, .bundle]
+exclude: [README.md]
 modootoday:
   heading_anchors: true
   logo: /assets/playpilot/favicon.svg
