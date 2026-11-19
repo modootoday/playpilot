@@ -114,6 +114,16 @@ playpilot render node     --device <name> [--workspace <dir>] [--config <dir>] [
 `--check` writes nothing and exits `1` when a file is stale. Other failures
 also exit `1`. See [Install a node](install.md) for how the files are used.
 
+## render roles
+
+```
+playpilot render roles --project <name> [--config <fleet repo>] [--repo <project checkout>] [--check]
+```
+
+Writes `.claude/agents/playpilot-<agent>.md` for each plugin agent the project's
+roles name (agent `playpilot-<agent>`), from definitions built into the CLI,
+because cloud sessions do not load plugins. `sync` covers these files.
+
 ## sync
 
 ```

@@ -171,19 +171,23 @@ idempotency key; a failed or `429` fire is logged and never fails the send.
 ## 7. CLI surface
 
 Implemented: `guard`, `history-check`, `surface-check`, `validate`,
-`render settings | prompt | node`, `sync`, `node install`, `plan`, `whoami`,
+`render settings | roles | prompt | node`, `sync`, `node install`, `plan`, `whoami`,
 `claim`, `release`, `mail send | inbox | read | ack` and `mcp`. Usage, exit codes and environment
 variables are in the [CLI reference](guides/cli.md).
 
-Planned: `migrate`, `events tail`, and `render` for role files.
+Planned: `migrate` and `events tail`.
 
 - `plan`: who does what (device × lane × project × role), and what is uncovered.
-- `render`: writes `.claude/settings.json` (`render settings`), systemd units
-  and Task Scheduler XML (`render node`) and scheduled-task prompts
-  (`render prompt`) from the config; role files are planned.
+- `render`: writes `.claude/settings.json`, role files, systemd units,
+  Task Scheduler XML and scheduled-task prompts from the config (implemented:
+  `render settings`, `render roles`, `render prompt`, `render node`).
+  `render roles` writes `.claude/agents/playpilot-<name>.md` for each plugin
+  agent the project's roles name, from the definitions built into the CLI,
+  because cloud sessions do not load plugins.
 - `whoami`: on a node, resolves its device id to roles, lanes and projects.
 - `sync --check` (implemented): lists every project-side file `render` would
-  produce that differs from the checkout (exit 1); `sync` writes them.
+  produce (`.claude/settings.json` and the role files) that differs from the
+  checkout (exit 1); `sync` writes them.
 - `node install` (implemented): puts `render node` output into the OS location
   (systemd user unit, Task Scheduler XML) and prints, never runs, the enable
   commands; `--dry-run` previews, `--force` replaces a file that differs.

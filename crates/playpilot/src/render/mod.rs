@@ -1,7 +1,8 @@
 //! `playpilot render`: projections of the fleet configuration.
 //!
-//! `settings` writes a project's guard hook, `prompt` prints a session's
-//! scheduled-task prompt, `node` writes a device's service files.
+//! `settings` writes a project's guard hook, `roles` its agent files,
+//! `prompt` prints a session's scheduled-task prompt, `node` writes a
+//! device's service files.
 //! `output` and `project` are shared with `sync` and `node install`.
 
 pub mod cli;
@@ -9,6 +10,7 @@ pub mod node;
 pub mod output;
 pub mod project;
 pub mod prompt;
+pub mod roles;
 pub mod settings;
 
 use std::path::Path;

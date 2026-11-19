@@ -1,4 +1,4 @@
-//! Presentation: `playpilot render settings | prompt | node`.
+//! Presentation: `playpilot render settings | roles | prompt | node`.
 //!
 //! `--config` is the fleet configuration repository (holds `fleet/` and
 //! `playpilot.lock`) and defaults to the current directory.
@@ -12,13 +12,14 @@ use super::{node, project, prompt};
 
 pub const USAGE: &str = "\
 usage: playpilot render settings --project <name> [--config <dir>] [--repo <dir>] [--check]
+       playpilot render roles    --project <name> [--config <dir>] [--repo <dir>] [--check]
        playpilot render prompt   --session <name> [--config <dir>]
        playpilot render node     --device <name> [--workspace <dir>] [--config <dir>] [--out <dir> [--check]]";
 
 /// Value options each verb accepts; `--check` is the only flag.
 fn options(verb: &str) -> Option<&'static [&'static str]> {
     match verb {
-        "settings" => Some(&["--project", "--config", "--repo"]),
+        "settings" | "roles" => Some(&["--project", "--config", "--repo"]),
         "prompt" => Some(&["--session", "--config"]),
         "node" => Some(&["--device", "--workspace", "--config", "--out"]),
         _ => None,
@@ -69,6 +70,7 @@ pub fn main(args: Vec<String>) -> ExitCode {
     };
     let result = match a.verb.as_str() {
         "settings" => settings(&a),
+        "roles" => roles(&a),
         "prompt" => prompt_cmd(&a),
         _ => node_cmd(&a),
     };
@@ -99,6 +101,23 @@ fn settings(a: &Args) -> Result<bool, Usage> {
     report((|| {
         let out = project::settings(a.config(), project, repo)?;
         sync_file(&out, a.check, "render settings")
+    })())
+}
+
+/// `render roles`: writes or checks `<repo>/.claude/agents/playpilot-*.md`.
+fn roles(a: &Args) -> Result<bool, Usage> {
+    let project = a.get("--project").ok_or(Usage)?;
+    let repo = Path::new(a.get("--repo").unwrap_or("."));
+    report((|| {
+        let files = project::roles(a.config(), project, repo)?;
+        if files.is_empty() {
+            println!("render: project {project} uses no playpilot agent");
+        }
+        let mut ok = true;
+        for out in &files {
+            ok &= sync_file(out, a.check, "render roles")?;
+        }
+        Ok(ok)
     })())
 }
 

@@ -77,7 +77,8 @@ pub fn strings(spec: &Table, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn string(spec: &Table, key: &str) -> Option<String> {
+/// A string field of a spec, `None` when missing or not a string.
+pub fn string(spec: &Table, key: &str) -> Option<String> {
     spec.get(key).and_then(Value::as_str).map(str::to_string)
 }
 
