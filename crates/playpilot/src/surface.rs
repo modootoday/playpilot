@@ -58,6 +58,10 @@ fn emails(text: &str) -> Vec<String> {
         if let Some((local, domain)) = w.split_once('@')
             && !local.is_empty()
             && domain.contains('.')
+            && domain
+                .rsplit('.')
+                .next()
+                .is_some_and(|tld| tld.len() >= 2 && tld.chars().all(|c| c.is_ascii_alphabetic()))
             && !domain.starts_with('.')
             && domain
                 .chars()

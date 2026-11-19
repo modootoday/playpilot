@@ -178,6 +178,12 @@ mod surface_rules {
     }
 
     #[test]
+    fn version_pins_are_not_emails() {
+        assert!(scan(&[item("remote_theme: owner/theme@v1.7.1")], &[]).is_empty());
+        assert!(scan(&[item("uses: actions/checkout@3d3c42e5")], &[]).is_empty());
+    }
+
+    #[test]
     fn empty_deny_list_is_allowed() {
         assert!(scan(&[item("anything")], &["".into(), "  ".into()]).is_empty());
     }
