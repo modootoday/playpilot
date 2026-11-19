@@ -12,6 +12,9 @@ ExecStart=%h/.local/bin/claude remote-control --spawn worktree --capacity 4 --pe
 # Server mode exits after ~10 minutes without network; come back on our own.
 Restart=always
 RestartSec=30
+# The server redraws a TUI about once a second; keep it out of the journal, keep errors.
+StandardOutput=null
+StandardError=journal
 
 [Install]
 WantedBy=default.target
