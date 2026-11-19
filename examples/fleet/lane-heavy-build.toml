@@ -1,0 +1,9 @@
+apiVersion = "playpilot.io/v1"
+kind = "Lane"
+[metadata]
+name = "heavy-build"
+[spec]
+label = "needs-heavy-build"
+requires = ["build:heavy"]
+timeout = "120m"
+source = "github-labels"

@@ -182,3 +182,70 @@ mod surface_rules {
         assert!(scan(&[item("anything")], &["".into(), "  ".into()]).is_empty());
     }
 }
+
+mod validate_rules {
+    use crate::validate::{check, parse};
+
+    fn res(file: &str, body: &str) -> crate::validate::Resource {
+        parse(file, &format!("apiVersion = \"playpilot.io/v1\"\n{body}")).expect(file)
+    }
+
+    #[test]
+    fn rejects_wrong_api_version_and_kind() {
+        assert!(
+            parse(
+                "a",
+                "apiVersion = \"v0\"\nkind = \"Lane\"\n[metadata]\nname = \"x\"\n[spec]\n"
+            )
+            .is_err()
+        );
+        assert!(parse("a", "apiVersion = \"playpilot.io/v1\"\nkind = \"Nope\"\n[metadata]\nname = \"x\"\n[spec]\n").is_err());
+    }
+
+    #[test]
+    fn references_and_coverage() {
+        let lane = res(
+            "l",
+            "kind = \"Lane\"\n[metadata]\nname = \"win\"\n[spec]\nrequires = [\"os:windows\"]\n",
+        );
+        let project = res(
+            "p",
+            "kind = \"Project\"\n[metadata]\nname = \"p\"\n[spec]\nlanes = [\"win\", \"ghost\"]\n",
+        );
+        let session = res(
+            "s",
+            "kind = \"Session\"\n[metadata]\nname = \"s\"\n[spec]\nproject = \"p\"\nrole = \"nobody\"\n",
+        );
+        let p = check(&[lane.clone(), project.clone(), session]);
+        assert!(p.iter().any(|x| x.contains("\"ghost\"")), "{p:?}");
+        assert!(p.iter().any(|x| x.contains("\"nobody\"")), "{p:?}");
+        assert!(
+            p.iter()
+                .any(|x| x.contains("no device can serve lane \"win\"")),
+            "{p:?}"
+        );
+        let device = res(
+            "d",
+            "kind = \"Device\"\n[metadata]\nname = \"d\"\n[spec]\ncapabilities = [\"os:windows\"]\n",
+        );
+        assert!(
+            !check(&[lane, project, device])
+                .iter()
+                .any(|x| x.contains("no device"))
+        );
+    }
+
+    #[test]
+    fn literal_secrets_and_duplicates() {
+        let w = res(
+            "w",
+            "kind = \"Webhook\"\n[metadata]\nname = \"w\"\n[spec]\ntoken = \"abc\"\nsigning = { secretRef = \"S\" }\n",
+        );
+        let w2 = res(
+            "w2",
+            "kind = \"Webhook\"\n[metadata]\nname = \"w\"\n[spec]\n",
+        );
+        let p = check(&[w, w2]);
+        assert_eq!(p.len(), 2, "{p:?}");
+    }
+}

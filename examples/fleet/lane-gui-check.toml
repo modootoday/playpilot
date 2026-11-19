@@ -1,0 +1,9 @@
+apiVersion = "playpilot.io/v1"
+kind = "Lane"
+[metadata]
+name = "gui-check"
+[spec]
+label = "needs-gui-check"
+requires = ["gui", "human-present"]
+timeout = "30m"
+source = "github-labels"

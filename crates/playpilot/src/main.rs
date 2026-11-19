@@ -6,6 +6,7 @@
 mod history;
 mod policy;
 mod surface;
+mod validate;
 
 use std::io::Read;
 use std::process::ExitCode;
@@ -15,12 +16,14 @@ fn main() -> ExitCode {
         Some("guard") => guard(),
         Some("history-check") => history_check(std::env::args().skip(2).collect()),
         Some("surface-check") => surface_check(std::env::args().skip(2).collect()),
+        Some("validate") => validate_dir(std::env::args().nth(2)),
         Some("--version" | "-V") => {
             println!("playpilot {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
         }
         _ => {
             eprintln!("usage: playpilot guard");
+            eprintln!("       playpilot validate <fleet-dir>");
             eprintln!(
                 "       playpilot surface-check --range <base>..<head> [--text-env NAME]... [--deny-env NAME]"
             );
@@ -73,6 +76,32 @@ fn history_check(args: Vec<String>) -> ExitCode {
     }
     if problems.is_empty() {
         println!("history-check: {} commit(s) ok", commits.len());
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    }
+}
+
+/// `playpilot validate <dir>`: exit 0 valid, exit 1 lists problems.
+fn validate_dir(dir: Option<String>) -> ExitCode {
+    let Some(dir) = dir else {
+        eprintln!("usage: playpilot validate <fleet-dir>");
+        return ExitCode::from(64);
+    };
+    let problems = match validate::read_dir(std::path::Path::new(&dir)) {
+        Ok(resources) => {
+            let p = validate::check(&resources);
+            if p.is_empty() {
+                println!("validate: {} resource(s) ok", resources.len());
+            }
+            p
+        }
+        Err(errors) => errors,
+    };
+    for p in &problems {
+        println!("{p}");
+    }
+    if problems.is_empty() {
         ExitCode::SUCCESS
     } else {
         ExitCode::from(1)

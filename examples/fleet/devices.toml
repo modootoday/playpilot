@@ -4,7 +4,7 @@ kind = "Device"
 name = "oss-desktop-2"
 annotations = { remoteControlTitle = "OSS Desktop #2" }
 [spec]
-capabilities = ["os:linux", "os:windows", "toolchain:msvc", "build:heavy"]
+capabilities = ["os:linux", "os:windows", "toolchain:msvc", "build:heavy", "gui", "human-present"]
 roles = ["heavy-builder", "windows-validator"]
 primaryLanes = ["heavy-build"]
 runtimes = [

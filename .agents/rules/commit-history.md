@@ -53,3 +53,14 @@ commit on it builds, passes the gates, and says what changed and why.
 | `History` required check (`playpilot history-check --range base..head --title "<PR title>"`) | Conventional subject for the PR title (squash) or every commit (merge commit); no merge commits in the range; no WIP/fixup/squash/amend/empty commits; author and committer noreply; no forbidden trailers |
 | Ruleset `main-protected` | one merge method; `required_linear_history` for squash repositories; no force push; no deletion |
 | Repository settings (files under `.github/settings/`) | squash title/message as in H2; "Always suggest updating pull request branches"; automatic head branch deletion |
+
+## H7 Auto-merge from the start
+- The agent turns GitHub auto-merge on (the repository's merge method) right
+  after it opens the pull request, before checks finish. GitHub merges only
+  when every required check passes; a red check leaves the pull request open
+  for the agent to fix.
+- `needs-human` pull requests follow the same flow: the required checks are
+  the measurement. Exceptions stay with the owner: changes that remove or
+  weaken a required check, rulesets that loosen protection, releases and tags.
+- An agent never merges directly. If checks finished before auto-merge could
+  be turned on, the owner merges.

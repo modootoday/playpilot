@@ -1,0 +1,10 @@
+apiVersion = "playpilot.io/v1"
+kind = "Role"
+[metadata]
+name = "windows-validator"
+[spec]
+agent = ".agents/agents/windows-validator.md"
+profile = "node"
+runtimes = ["windows"]
+lanes = ["windows-run", "gui-check"]
+mayOpenPullRequest = false
