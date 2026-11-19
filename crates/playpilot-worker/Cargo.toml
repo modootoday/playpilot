@@ -1,0 +1,18 @@
+[package]
+name = "playpilot-worker"
+version = "0.1.0"
+description = "Phase B Cloudflare Worker: compiled config, lane leases, heartbeats, events and a remote MCP endpoint"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+worker = "0.9"

@@ -1,0 +1,46 @@
+# Phase B Worker. Placeholder names only: the owner adds routes, the account
+# and the Access application when deploying. Set PLAYPILOT_IDENTITIES,
+# PLAYPILOT_CONFIG and (optionally) PLAYPILOT_OPS as secrets or vars at deploy.
+name = "playpilot"
+main = "build/index.js"
+compatibility_date = "2026-11-01"
+
+[build]
+command = "cargo install -q worker-build && worker-build --release"
+
+[vars]
+PLAYPILOT_OFFLINE_MINUTES = "10"
+
+[[durable_objects.bindings]]
+name = "LEASES"
+class_name = "LeaseObject"
+
+[[durable_objects.bindings]]
+name = "NODES"
+class_name = "NodeObject"
+
+[[durable_objects.bindings]]
+name = "BUS"
+class_name = "BusObject"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LeaseObject", "NodeObject", "BusObject"]
+
+[env.stage]
+name = "playpilot-stage"
+
+[env.stage.vars]
+PLAYPILOT_OFFLINE_MINUTES = "10"
+
+[[env.stage.durable_objects.bindings]]
+name = "LEASES"
+class_name = "LeaseObject"
+
+[[env.stage.durable_objects.bindings]]
+name = "NODES"
+class_name = "NodeObject"
+
+[[env.stage.durable_objects.bindings]]
+name = "BUS"
+class_name = "BusObject"

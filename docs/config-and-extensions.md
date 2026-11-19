@@ -95,6 +95,10 @@ every call but the public `GET /v1/state` subset sends the
 `POST /v1/nodes/{id}/heartbeat`, `POST /v1/events`, `GET /v1/state`.
 Access: Cloudflare Access service tokens per node. The Worker holds a GitHub
 App installation (issues/labels write, contents read) and no Claude credentials.
+The Worker lives in `crates/playpilot-worker` (Durable Objects `LeaseObject`,
+`NodeObject`, `BusObject`, plus a remote MCP endpoint `POST /mcp` with the
+local `playpilot mcp` tool names); the caller's actor and claim id come from
+its service token, never from the request. Build with `worker-build --release`.
 
 ## 6. Change control
 
