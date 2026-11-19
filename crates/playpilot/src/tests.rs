@@ -345,10 +345,14 @@ mod mail_rules {
     #[derive(Default)]
     struct Fake {
         boxes: RefCell<Vec<(String, Stored)>>,
+        actors: Vec<String>,
     }
 
     impl Transport for Fake {
-        fn send(&self, e: &Envelope) -> Result<u64, String> {
+        fn actors(&self) -> Result<Vec<String>, String> {
+            Ok(self.actors.clone())
+        }
+        fn send(&self, mailbox: &str, e: &Envelope) -> Result<u64, String> {
             let mut b = self.boxes.borrow_mut();
             let id = b.len() as u64 + 1;
             let stored = Stored {
@@ -358,7 +362,7 @@ mod mail_rules {
                 read: false,
                 acked: false,
             };
-            b.push((e.to.clone(), stored));
+            b.push((mailbox.to_string(), stored));
             Ok(id)
         }
         fn list(&self, actor: &str) -> Result<Vec<Stored>, String> {
@@ -387,11 +391,38 @@ mod mail_rules {
     }
 
     #[test]
+    fn broadcast_is_copied_to_every_other_mailbox() {
+        let t = Fake {
+            actors: ["all", "arks", "design", "kinekino"]
+                .map(String::from)
+                .to_vec(),
+            ..Fake::default()
+        };
+        let sent = send(&t, env("design", "all")).unwrap();
+        let boxes: Vec<_> = sent.iter().map(|(b, _)| b.as_str()).collect();
+        assert_eq!(boxes, ["arks", "kinekino"]);
+        // Each recipient acks its own copy; the other copy stays unread.
+        t.receipt(sent[0].1, Receipt::Ack).unwrap();
+        let far = "2099-01-01T00:00:00Z";
+        assert!(inbox(&t, "arks", false, far).unwrap().is_empty());
+        let k = inbox(&t, "kinekino", false, far).unwrap();
+        assert_eq!(k.len(), 1);
+        assert_eq!(k[0].envelope.to, "all");
+        let lonely = Fake {
+            actors: vec!["all".into(), "design".into()],
+            ..Fake::default()
+        };
+        assert!(send(&lonely, env("design", "all")).is_err());
+    }
+
+    #[test]
     fn inbox_hides_acked_and_old_broadcasts() {
         let t = Fake::default();
+        // Legacy broadcasts were posted straight to the `all` mailbox.
+        let legacy = |e: Envelope| t.send(&e.to.clone(), &e).unwrap();
         send(&t, env("kinekino", "design")).unwrap(); // id 1, 11th
-        send(&t, env("design", "all")).unwrap(); // id 2, 12th: own broadcast
-        send(&t, env("arks", "all")).unwrap(); // id 3, 13th
+        legacy(env("design", "all")); // id 2, 12th: own broadcast
+        legacy(env("arks", "all")); // id 3, 13th
         send(&t, env("svgif", "design")).unwrap(); // id 4, 14th
         t.receipt(4, Receipt::Ack).unwrap();
         let ids = |v: Vec<Stored>| v.into_iter().map(|m| m.id).collect::<Vec<_>>();

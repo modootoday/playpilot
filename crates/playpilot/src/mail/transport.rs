@@ -10,8 +10,10 @@ pub enum Receipt {
 }
 
 pub trait Transport {
-    /// Delivers `envelope` to the mailbox of `envelope.to`; returns the message id.
-    fn send(&self, envelope: &Envelope) -> Result<u64, String>;
+    /// Delivers `envelope` to `mailbox`; returns the message id.
+    fn send(&self, mailbox: &str, envelope: &Envelope) -> Result<u64, String>;
+    /// Every actor that has a mailbox, `all` included.
+    fn actors(&self) -> Result<Vec<String>, String>;
     /// Lists the messages in `actor`'s mailbox, oldest first.
     fn list(&self, actor: &str) -> Result<Vec<Stored>, String>;
     /// Records a receipt on a message.

@@ -100,8 +100,9 @@ fn run(args: Vec<String>) -> Result<(), String> {
                 re: a.re.clone(),
                 body: read_body(&a)?,
             };
-            let id = super::send(&t, envelope)?;
-            println!("sent {id}");
+            for (mailbox, id) in super::send(&t, envelope)? {
+                println!("sent {id} to {mailbox}");
+            }
         }
         "inbox" => {
             let now = SystemTime::now()

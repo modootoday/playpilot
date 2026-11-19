@@ -12,10 +12,13 @@ pub mod transport;
 use message::{Envelope, Stored, valid_actor};
 use transport::{Receipt, Transport};
 
-/// The broadcast mailbox every actor also reads.
+/// The broadcast address. A broadcast is copied into every other actor's own
+/// mailbox, because a mailbox's events wake only one subscribed session. The
+/// legacy `all` mailbox is still read for older broadcasts.
 pub const BROADCAST: &str = "all";
 
-pub fn send(t: &dyn Transport, envelope: Envelope) -> Result<u64, String> {
+/// Sends a message; returns `(mailbox, message id)` for every copy delivered.
+pub fn send(t: &dyn Transport, envelope: Envelope) -> Result<Vec<(String, u64)>, String> {
     for actor in [&envelope.from, &envelope.to] {
         if !valid_actor(actor) {
             return Err(format!("`{actor}` is not a valid actor name"));
@@ -27,13 +30,41 @@ pub fn send(t: &dyn Transport, envelope: Envelope) -> Result<u64, String> {
     if envelope.body.trim().is_empty() {
         return Err("a message body is required".into());
     }
-    t.send(&envelope)
+    if envelope.to != BROADCAST {
+        return Ok(vec![(
+            envelope.to.clone(),
+            t.send(&envelope.to, &envelope)?,
+        )]);
+    }
+    let targets: Vec<String> = t
+        .actors()?
+        .into_iter()
+        .filter(|a| a != BROADCAST && *a != envelope.from && valid_actor(a))
+        .collect();
+    if targets.is_empty() {
+        return Err("no other actor has a mailbox".into());
+    }
+    let mut sent = Vec::new();
+    for actor in targets {
+        match t.send(&actor, &envelope) {
+            Ok(id) => sent.push((actor, id)),
+            Err(e) => {
+                let done: Vec<String> = sent.iter().map(|(a, id)| format!("{a} {id}")).collect();
+                return Err(format!(
+                    "broadcast to `{actor}` failed after [{}]: {e}",
+                    done.join(", ")
+                ));
+            }
+        }
+    }
+    Ok(sent)
 }
 
 /// Messages for `actor`, oldest first: its own mailbox (without `all`, only
-/// messages not acked yet) plus broadcasts created at or after `broadcast_since`
-/// (an RFC 3339 UTC timestamp). Receipts on a broadcast are shared by every
-/// actor that uses the same account, so broadcasts are filtered by age, not by ack.
+/// messages not acked yet; broadcast copies land here too) plus messages in the
+/// legacy `all` mailbox created at or after `broadcast_since` (an RFC 3339 UTC
+/// timestamp). Receipts there are shared by every actor on the same account,
+/// so those are filtered by age, not by ack.
 pub fn inbox(
     t: &dyn Transport,
     actor: &str,
