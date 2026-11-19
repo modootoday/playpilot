@@ -433,6 +433,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "wasm-bindgen",
+ "web-sys",
  "worker",
 ]
 
