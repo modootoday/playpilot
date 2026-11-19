@@ -1,3 +1,5 @@
+---
+---
 # Architecture
 
 One repository configures every place an agent runs: two home devices, Claude

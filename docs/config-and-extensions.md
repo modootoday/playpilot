@@ -1,3 +1,5 @@
+---
+---
 # Configuration, interfaces and extensions
 
 ## 1. One resource model
