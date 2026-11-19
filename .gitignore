@@ -7,3 +7,4 @@
 .env.*
 /docs/_site/
 /docs/.jekyll-cache/
+/crates/playpilot-worker/build/

@@ -1,0 +1,60 @@
+//! Configuration bindings. Every value is set by the owner at deploy time;
+//! a missing or invalid identity map means no caller is recognised.
+
+use worker::Env;
+
+use crate::domain::config::Compiled;
+use crate::domain::identity::IdentityMap;
+use crate::domain::node::DEFAULT_OFFLINE_AFTER;
+use crate::domain::ops::{OpsTable, Switches};
+
+/// JSON map from Access client id to actor and claim id.
+pub const IDENTITIES: &str = "PLAYPILOT_IDENTITIES";
+/// The compiled configuration JSON (served by `/v1/config`).
+pub const CONFIG: &str = "PLAYPILOT_CONFIG";
+/// Worker-side narrow-only ops, keyed `Kind/name`.
+pub const OPS: &str = "PLAYPILOT_OPS";
+/// Minutes without a heartbeat before a node is offline.
+pub const OFFLINE_MINUTES: &str = "PLAYPILOT_OFFLINE_MINUTES";
+
+/// A plain var or a secret with that name.
+fn text(env: &Env, name: &str) -> Option<String> {
+    env.var(name)
+        .map(|v| v.to_string())
+        .or_else(|_| env.secret(name).map(|s| s.to_string()))
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+}
+
+pub fn identities(env: &Env) -> Result<IdentityMap, String> {
+    IdentityMap::parse(&text(env, IDENTITIES).ok_or(format!("{IDENTITIES} is not set"))?)
+}
+
+pub fn config(env: &Env) -> Result<Compiled, String> {
+    Compiled::parse(&text(env, CONFIG).ok_or(format!("{CONFIG} is not set"))?)
+}
+
+pub fn worker_ops(env: &Env) -> Result<OpsTable, String> {
+    text(env, OPS).map_or(Ok(OpsTable::default()), |t| OpsTable::parse(&t))
+}
+
+/// File ops from the compiled config narrowed by Worker ops. A Worker ops
+/// value that does not parse is an error, never a silent widening.
+pub fn switches(env: &Env) -> Result<Switches, String> {
+    let file = config(env).map(|c| c.file_ops()).unwrap_or_default();
+    Ok(Switches {
+        file,
+        worker: worker_ops(env)?,
+    })
+}
+
+pub fn offline_after(env: &Env) -> u64 {
+    text(env, OFFLINE_MINUTES)
+        .and_then(|m| m.trim().parse::<u64>().ok())
+        .filter(|m| *m > 0)
+        .map_or(DEFAULT_OFFLINE_AFTER, |m| m * 60)
+}
+
+pub fn now() -> u64 {
+    worker::Date::now().as_millis() / 1_000
+}
