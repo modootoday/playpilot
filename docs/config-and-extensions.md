@@ -8,15 +8,19 @@ Everything the fleet knows is a versioned resource:
 
 ```
 apiVersion = "playpilot.io/v1"
-kind       = Fleet | Project | Lane | Device | Role | PermissionProfile | Session | Webhook | Plugin
+kind       = Fleet | Environment | Project | Lane | Device | Role | PermissionProfile | Session | Webhook | Plugin
 metadata   = { name, labels, annotations }
 spec       = kind-specific, plus spec.extensions."x-<plugin>" for plugin-owned fields
 ```
 
 - Files: one resource per file (TOML, YAML or JSON; all map to the same
   schema). Canon location: the instance's private configuration repository, `fleet/`. Public repositories receive only rendered projections (`playpilot render`), never the source.
-- Schema: JSON Schema 2020-12 generated from the Rust types (`schemars`), published
-  at `schemas/fleet.v1.schema.json` and on each release. Editors validate with it.
+- Schema: JSON Schema 2020-12 at
+  [`schemas/playpilot.io-v1.schema.json`](../schemas/playpilot.io-v1.schema.json),
+  one `if/then` spec schema per kind; published on each release. Editors
+  validate with it. It is hand-written for now; later it is generated from the
+  Rust types (`schemars`). Tests keep it in step with the kinds `validate` knows
+  and check that every file under `examples/` parses.
 - Compatibility: `v1` takes additive changes only. Unknown core fields are
   errors; unknown fields under `extensions` are kept and passed to the owning
   plugin. A breaking change ships as `v2` with `playpilot migrate` and both
@@ -84,7 +88,9 @@ fleet depends on them.
 | Runtime switches | `ops` in the file | Worker `ops` (pause node/lane, lower capacity) — narrow-only; effective value is the narrower of file and Worker |
 | Cloud sessions | read Git (no network change) | still read Git |
 
-Worker HTTP API (OpenAPI 3.1, `schemas/worker.v1.openapi.yaml`):
+Worker HTTP API (OpenAPI 3.1, [`schemas/worker.v1.openapi.yaml`](../schemas/worker.v1.openapi.yaml);
+every call but the public `GET /v1/state` subset sends the
+`CF-Access-Client-Id` / `CF-Access-Client-Secret` headers):
 `GET /v1/config`, `POST /v1/leases`, `DELETE /v1/leases/{id}`,
 `POST /v1/nodes/{id}/heartbeat`, `POST /v1/events`, `GET /v1/state`.
 Access: Cloudflare Access service tokens per node. The Worker holds a GitHub

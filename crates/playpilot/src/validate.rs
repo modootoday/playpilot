@@ -11,7 +11,7 @@ use toml::{Table, Value};
 
 pub const API_VERSION: &str = "playpilot.io/v1";
 
-const KINDS: [&str; 10] = [
+pub(crate) const KINDS: [&str; 10] = [
     "Fleet",
     "Environment",
     "Project",
