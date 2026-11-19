@@ -8,6 +8,7 @@ case "$repo" in /mnt/*) echo "clone the starter onto the Linux filesystem (~), n
 command -v claude >/dev/null || curl -fsSL https://claude.ai/install.sh | bash
 command -v gh >/dev/null || { echo "install gh (apt) and run: gh auth login" >&2; exit 1; }
 command -v cargo >/dev/null || { echo "install rustup first" >&2; exit 1; }
+command -v cc >/dev/null || { echo "install a C linker first (Ubuntu: sudo apt install -y build-essential)" >&2; exit 1; }
 
 cargo install --locked --path "$repo/crates/playpilot"
 mkdir -p ~/.config/fleet ~/.config/systemd/user
