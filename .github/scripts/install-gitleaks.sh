@@ -11,8 +11,8 @@ esac
 name="gitleaks_${version}_${arch}.tar.gz"
 base="https://github.com/gitleaks/gitleaks/releases/download/v${version}"
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
-curl -fsSL --retry 3 -o "$work/$name" "$base/$name"
-curl -fsSL --retry 3 -o "$work/checksums.txt" "$base/gitleaks_${version}_checksums.txt"
+curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o "$work/$name" "$base/$name"
+curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o "$work/checksums.txt" "$base/gitleaks_${version}_checksums.txt"
 expected="$(awk -v n="$name" '$2 == n {print $1}' "$work/checksums.txt")"
 [ -n "$expected" ] || { echo "no checksum for $name" >&2; exit 1; }
 actual="$(sha256sum "$work/$name" | awk '{print $1}')"
