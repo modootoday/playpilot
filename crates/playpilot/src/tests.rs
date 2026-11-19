@@ -213,6 +213,16 @@ mod surface_rules {
     }
 
     #[test]
+    fn github_service_senders_are_not_personal() {
+        let msg = "Signed-off-by: dependabot[bot] <support@github.com>";
+        assert!(scan(&[item(msg)], &[]).is_empty());
+        assert_eq!(
+            scan(&[item(&format!("{}@github.com", "octo"))], &[]).len(),
+            1
+        );
+    }
+
+    #[test]
     fn version_pins_are_not_emails() {
         assert!(scan(&[item("remote_theme: owner/theme@v1.7.1")], &[]).is_empty());
         assert!(scan(&[item("uses: actions/checkout@3d3c42e5")], &[]).is_empty());

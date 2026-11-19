@@ -44,7 +44,11 @@ pub fn scan(items: &[Item], deny_terms: &[String]) -> Vec<String> {
 fn allowed_email(e: &str) -> bool {
     let e = e.to_ascii_lowercase();
     e.ends_with("@users.noreply.github.com")
-        || e == "noreply@github.com"
+        // GitHub service senders, e.g. Dependabot's `Signed-off-by: ... <support@github.com>`.
+        || matches!(
+            e.as_str(),
+            "noreply@github.com" | "support@github.com" | "action@github.com" | "actions@github.com"
+        )
         || e.ends_with("@example.com")
         || e.ends_with("@example.org")
         || e.ends_with("@example.invalid")
