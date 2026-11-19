@@ -173,17 +173,37 @@ fn guard() -> ExitCode {
         eprintln!("playpilot guard: could not read the hook input");
         return ExitCode::from(2);
     }
-    let policy = policy::Policy::from_env_value(
+    let mut policy = policy::Policy::from_env_value(
         std::env::var("PLAYPILOT_PROTECTED_BRANCHES")
             .ok()
             .as_deref(),
     );
+    policy.local_tags = local_tags(&input);
     match decide(&policy, &input) {
         Ok(()) => ExitCode::SUCCESS,
         Err(policy::Refusal(msg)) => {
             eprintln!("{msg}");
             ExitCode::from(2)
         }
+    }
+}
+
+/// Tags of the repository at the hook's `cwd`; empty when git is unavailable.
+fn local_tags(input: &str) -> Vec<String> {
+    let cwd = serde_json::from_str::<serde_json::Value>(input)
+        .ok()
+        .and_then(|e| e.get("cwd").and_then(|v| v.as_str()).map(String::from));
+    let mut git = std::process::Command::new("git");
+    git.args(["tag", "--list"]);
+    if let Some(dir) = cwd {
+        git.current_dir(dir);
+    }
+    match git.output() {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(str::to_string)
+            .collect(),
+        _ => Vec::new(),
     }
 }
 

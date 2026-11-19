@@ -18,12 +18,15 @@ const AGENT_PREFIXES: [&str; 6] = [
 #[derive(Debug, Clone)]
 pub struct Policy {
     pub protected_branches: Vec<String>,
+    /// Tag names in the working repository; a bare tag name in a refspec pushes that tag.
+    pub local_tags: Vec<String>,
 }
 
 impl Default for Policy {
     fn default() -> Self {
         Self {
             protected_branches: vec!["main".into(), "master".into()],
+            local_tags: Vec::new(),
         }
     }
 }
@@ -38,6 +41,7 @@ impl Policy {
                     .map(|s| s.trim().to_string())
                     .filter(|s| !s.is_empty())
                     .collect(),
+                local_tags: Vec::new(),
             },
             _ => Self::default(),
         }
@@ -155,6 +159,14 @@ impl Policy {
             if spec.starts_with("refs/tags/") || spec.contains(":refs/tags/") {
                 return Err(refusal("pushing tags is owner-only"));
             }
+            if spec
+                .split(':')
+                .any(|side| looks_like_version(side) || self.local_tags.iter().any(|t| t == side))
+            {
+                return Err(refusal(&format!(
+                    "`{spec}` names a tag or a version; pushing tags is owner-only"
+                )));
+            }
             let dst = spec.rsplit(':').next().unwrap_or(spec);
             let dst = dst.trim_start_matches("refs/heads/");
             if dst == "HEAD" || dst == "@" {
@@ -182,6 +194,15 @@ impl Policy {
         }
         Ok(())
     }
+}
+
+/// `v1.0.0`, `1.2`, `v2.0.0-rc.1`: names that are tags by convention, not branches.
+fn looks_like_version(name: &str) -> bool {
+    let core = name.strip_prefix(['v', 'V']).unwrap_or(name);
+    let core = core.split(['-', '+']).next().unwrap_or(core);
+    let mut parts = core.split('.');
+    parts.clone().count() >= 2
+        && parts.all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
 }
 
 fn is_tag_listing(rest: &[String]) -> bool {
