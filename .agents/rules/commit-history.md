@@ -64,3 +64,6 @@ commit on it builds, passes the gates, and says what changed and why.
   weaken a required check, rulesets that loosen protection, releases and tags.
 - An agent never merges directly. If checks finished before auto-merge could
   be turned on, the owner merges.
+- To add commits to a pull request that has auto-merge on, turn auto-merge off
+  first, push, then turn it on again. Otherwise GitHub can merge the earlier
+  head the moment its required checks pass, and the new commits miss the merge.
