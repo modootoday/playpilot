@@ -8,6 +8,7 @@ mod gh;
 mod history;
 mod mail;
 mod mcp;
+mod plan;
 mod policy;
 mod render;
 mod surface;
@@ -26,6 +27,7 @@ fn main() -> ExitCode {
         Some("surface-check") => surface_check(std::env::args().skip(2).collect()),
         Some("validate") => validate_dir(std::env::args().nth(2)),
         Some("render") => render_cmd(std::env::args().skip(2).collect()),
+        Some(v @ ("plan" | "whoami")) => plan_cmd(v, std::env::args().skip(2).collect()),
         Some("--version" | "-V") => {
             println!("playpilot {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
@@ -38,6 +40,7 @@ fn main() -> ExitCode {
             );
             eprintln!("       playpilot claim|release <owner/repo#n> ... (playpilot claim --help)");
             eprintln!("       playpilot validate <fleet-dir>");
+            eprintln!("       {PLAN_USAGE}");
             eprintln!("       {RENDER_USAGE}");
             eprintln!(
                 "       playpilot surface-check --range <base>..<head> [--text-env NAME]... [--deny-env NAME]"
@@ -120,6 +123,54 @@ fn validate_dir(dir: Option<String>) -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::from(1)
+    }
+}
+
+const PLAN_USAGE: &str =
+    "playpilot plan [--config <dir>] | playpilot whoami --device <name> [--config <dir>]";
+
+/// `playpilot plan` / `whoami`: read-only views of the fleet configuration.
+/// `--config` holds `fleet/` (default: current directory); the device defaults
+/// to `PLAYPILOT_DEVICE`.
+fn plan_cmd(verb: &str, args: Vec<String>) -> ExitCode {
+    let (mut config, mut device) = (".".to_string(), std::env::var("PLAYPILOT_DEVICE").ok());
+    let mut it = args.into_iter();
+    while let Some(a) = it.next() {
+        match (a.as_str(), it.next()) {
+            ("--config", Some(v)) => config = v,
+            ("--device", Some(v)) if verb == "whoami" => device = Some(v),
+            _ => {
+                eprintln!("usage: {PLAN_USAGE}");
+                return ExitCode::from(64);
+            }
+        }
+    }
+    let resources = match validate::read_dir(&std::path::Path::new(&config).join("fleet")) {
+        Ok(r) => r,
+        Err(e) => {
+            for p in e {
+                eprintln!("{verb}: {p}");
+            }
+            return ExitCode::from(1);
+        }
+    };
+    let out = if verb == "plan" {
+        Ok(plan::plan(&resources))
+    } else {
+        match device {
+            Some(d) => plan::whoami(&resources, &d),
+            None => Err("set --device or PLAYPILOT_DEVICE".into()),
+        }
+    };
+    match out {
+        Ok(text) => {
+            print!("{text}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("{verb}: {e}");
+            ExitCode::from(1)
+        }
     }
 }
 
