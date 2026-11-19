@@ -78,8 +78,8 @@ pub fn stored_from_comment(c: &Value) -> Option<Stored> {
 }
 
 impl Transport for GitHub {
-    fn send(&self, envelope: &Envelope) -> Result<u64, String> {
-        let number = self.mailbox(&envelope.to)?;
+    fn send(&self, mailbox: &str, envelope: &Envelope) -> Result<u64, String> {
+        let number = self.mailbox(mailbox)?;
         let path = format!("repos/{}/issues/{number}/comments", self.repo);
         let body = serde_json::json!({ "body": envelope.render() }).to_string();
         let created = self.api(&["-X", "POST", &path, "--input", "-"], Some(&body))?;
@@ -87,6 +87,33 @@ impl Transport for GitHub {
             .get("id")
             .and_then(Value::as_u64)
             .ok_or_else(|| "GitHub did not return a comment id".to_string())
+    }
+
+    fn actors(&self) -> Result<Vec<String>, String> {
+        let mut out = Vec::new();
+        for page in 1.. {
+            let path = format!(
+                "repos/{}/pulls?state=open&per_page=100&page={page}",
+                self.repo
+            );
+            let batch = self.api(&[&path], None)?;
+            let items = batch.as_array().cloned().unwrap_or_default();
+            out.extend(items.iter().filter_map(|pr| {
+                let same_repo = pr.pointer("/head/repo/full_name").and_then(Value::as_str)
+                    == Some(self.repo.as_str());
+                let actor = pr
+                    .pointer("/head/ref")?
+                    .as_str()?
+                    .strip_prefix("mailbox/")?;
+                same_repo.then(|| actor.to_string())
+            }));
+            if items.len() < 100 {
+                break;
+            }
+        }
+        out.sort();
+        out.dedup();
+        Ok(out)
     }
 
     fn list(&self, actor: &str) -> Result<Vec<Stored>, String> {
