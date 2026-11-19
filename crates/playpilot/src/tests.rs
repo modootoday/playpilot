@@ -1279,3 +1279,124 @@ mod install_rules {
         assert!(targets(&BOTH[1..], None, dir).is_err());
     }
 }
+
+mod roles_rules {
+    use crate::render::roles::{
+        GENERATED, PLUGIN_AGENTS, file_name, is_role_name, project_agents, role_file,
+    };
+    use crate::validate::parse;
+
+    fn r(kind: &str, name: &str, spec: &str) -> crate::validate::Resource {
+        let text = format!(
+            "apiVersion = \"playpilot.io/v1\"\nkind = \"{kind}\"\n[metadata]\nname = \"{name}\"\n[spec]\n{spec}\n"
+        );
+        parse("t.toml", &text).unwrap()
+    }
+
+    fn fleet() -> Vec<crate::validate::Resource> {
+        vec![
+            r("Project", "alpha", "protected = [\"main\"]"),
+            r("Project", "beta", "protected = [\"main\"]"),
+            r("Role", "builder", "agent = \"playpilot:heavy-builder\""),
+            r("Role", "implementer", "agent = \"playpilot:implementer\""),
+            r("Role", "local", "agent = \"project-agent\""),
+            r(
+                "Session",
+                "alpha-slices",
+                "project = \"alpha\"\nrole = \"implementer\"",
+            ),
+            r(
+                "Session",
+                "alpha-local",
+                "project = \"alpha\"\nrole = \"local\"",
+            ),
+            r(
+                "Session",
+                "alpha-more",
+                "project = \"alpha\"\nrole = \"implementer\"",
+            ),
+        ]
+    }
+
+    #[test]
+    fn plain_role_names_only() {
+        for ok in ["implementer", "heavy-builder", "agent2"] {
+            assert!(is_role_name(ok), "{ok}");
+        }
+        for bad in [
+            "",
+            "Implementer",
+            "-a",
+            "a-",
+            "a--b",
+            "a_b",
+            "../x",
+            "a/b",
+            "2a",
+        ] {
+            assert!(!is_role_name(bad), "{bad}");
+        }
+        assert!(role_file("../implementer").is_err());
+        assert!(role_file("no-such-agent").is_err());
+    }
+
+    #[test]
+    fn sessions_pick_the_agents_and_others_fall_back_to_every_role() {
+        let f = fleet();
+        assert_eq!(project_agents(&f, "alpha").unwrap(), ["implementer"]);
+        assert_eq!(
+            project_agents(&f, "beta").unwrap(),
+            ["heavy-builder", "implementer"]
+        );
+        assert!(project_agents(&f, "gamma").is_err());
+
+        let mut ghost = fleet();
+        ghost.push(r("Role", "ghost", "agent = \"playpilot:ghost\""));
+        ghost.push(r(
+            "Session",
+            "beta-ghost",
+            "project = \"beta\"\nrole = \"ghost\"",
+        ));
+        assert!(
+            project_agents(&ghost, "beta")
+                .unwrap_err()
+                .contains("ghost")
+        );
+        let mut odd = fleet();
+        odd.push(r("Role", "odd", "agent = \"playpilot:Odd_Name\""));
+        odd.push(r(
+            "Session",
+            "beta-odd",
+            "project = \"beta\"\nrole = \"odd\"",
+        ));
+        assert!(project_agents(&odd, "beta").is_err());
+        let mut missing = fleet();
+        missing.push(r(
+            "Session",
+            "beta-x",
+            "project = \"beta\"\nrole = \"nobody\"",
+        ));
+        assert!(project_agents(&missing, "beta").is_err());
+    }
+
+    #[test]
+    fn role_file_marks_the_plugin_text_as_generated() {
+        for (name, source) in PLUGIN_AGENTS {
+            let text = role_file(name).unwrap();
+            assert!(
+                text.starts_with(&format!("---\nname: playpilot-{name}\n")),
+                "{text}"
+            );
+            let (_, body) = text[4..].split_once("\n---\n").unwrap();
+            assert!(body.starts_with(&format!("{GENERATED}\n")), "{text}");
+            let plain = source.replace("\r\n", "\n").replacen(
+                &format!("\nname: {name}\n"),
+                &format!("\nname: playpilot-{name}\n"),
+                1,
+            );
+            assert_eq!(text.replacen(&format!("{GENERATED}\n"), "", 1), plain);
+            assert!(!text.contains('\r'));
+        }
+        assert_eq!(file_name("implementer"), "playpilot-implementer.md");
+    }
+}

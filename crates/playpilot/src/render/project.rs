@@ -9,7 +9,24 @@ use super::settings as guard;
 
 /// Every file rendered into the checkout at `repo` for `project`.
 pub fn outputs(config: &Path, project: &str, repo: &Path) -> Result<Vec<Output>, String> {
-    Ok(vec![settings(config, project, repo)?])
+    let mut out = vec![settings(config, project, repo)?];
+    out.extend(roles(config, project, repo)?);
+    Ok(out)
+}
+
+/// `<repo>/.claude/agents/playpilot-<name>.md` for each plugin agent the
+/// project's roles use.
+pub fn roles(config: &Path, project: &str, repo: &Path) -> Result<Vec<Output>, String> {
+    let dir = repo.join(".claude").join("agents");
+    super::roles::project_agents(&super::fleet(config)?, project)?
+        .iter()
+        .map(|name| {
+            Ok(Output {
+                path: dir.join(super::roles::file_name(name)),
+                text: super::roles::role_file(name)?,
+            })
+        })
+        .collect()
 }
 
 /// `<repo>/.claude/settings.json` with the guard hook merged in.

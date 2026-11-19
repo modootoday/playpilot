@@ -37,6 +37,20 @@ branches from the `Project` resource, reinstalls the CLI when the recorded rev
 differs, and blocks the tool call when no CLI can run. Other settings and
 hooks in the file are kept.
 
+Cloud sessions do not get the plugin's agent definitions either. Write them
+into the checkout as `.claude/agents/playpilot-<name>.md`:
+
+```
+playpilot render roles --project <name> --repo <project checkout>
+playpilot render roles --project <name> --repo <project checkout> --check
+```
+
+It writes one file for each plugin agent (`agent = "playpilot:<name>"`) of
+the roles the project's sessions use; a project with no session gets every
+role that names a plugin agent. The text is the plugin's `plugin/agents/`
+definition built into the CLI, with a first body line that marks it as
+generated; change the fleet configuration or the pinned rev, not the file.
+
 The same configuration renders a session's scheduled-task prompt and a
 device's service files:
 
@@ -57,8 +71,8 @@ restarts it on failure (`Register-ScheduledTask -TaskName claude-rc -Xml
 The capacity in each file comes from the runtime entry. Without `--out` the
 files are printed; `--check` exits 1 when a file differs.
 
-To check or update every project-side file in one run (today the
-`.claude/settings.json` above), use `sync`:
+To check or update every project-side file in one run (the
+`.claude/settings.json` and the role files above), use `sync`:
 
 ```
 playpilot sync --check --project <name> --repo <project checkout>
