@@ -13,7 +13,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4 # pin to a full SHA before enabling the ruleset
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: python3 -c "import json,sys;[json.load(open(f)) for f in sys.argv[1:]]" .claude/settings.json profiles/node.settings.json .github/labels.json
@@ -23,14 +23,14 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4 # pin to a full SHA before enabling the ruleset
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: cargo test --locked
   history:
     name: History
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4 # pin to a full SHA before enabling the ruleset
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - run: cargo build --locked --release

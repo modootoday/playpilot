@@ -1,0 +1,48 @@
+name: public-surface
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: public-surface-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  GITLEAKS_VERSION: "8.28.0"
+jobs:
+  public-surface:
+    # Common rules C4. The deny list is the PLAYPILOT_DENY_TERMS secret; the owner
+    # recorded "no private terms" (2026-11-19), so an empty value runs the generic scans.
+    name: Public surface
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - run: cargo build --locked --release
+      - env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event.after }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          DENY_TERMS: ${{ secrets.PLAYPILOT_DENY_TERMS }}
+        run: ./target/release/playpilot surface-check --range "$BASE..$HEAD" --text-env PR_TITLE --text-env PR_BODY --deny-env DENY_TERMS
+  secret-scan:
+    # Common rules C4.5: gitleaks from a pinned release checked against its checksums file.
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - run: bash .github/scripts/install-gitleaks.sh "$GITLEAKS_VERSION" "$RUNNER_TEMP/gitleaks"
+      - env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event.after }}
+        run: '"$RUNNER_TEMP/gitleaks/gitleaks" git --no-banner --redact --exit-code 1 --log-opts="$BASE..$HEAD" .'
