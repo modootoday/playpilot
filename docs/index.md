@@ -34,4 +34,3 @@ See [Install a node](guides/install.md) for a home device and
 
 - [Architecture](architecture.md)
 - [Configuration, interfaces and extensions](config-and-extensions.md)
-- [Operations domain](domain.md)

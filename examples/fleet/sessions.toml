@@ -6,5 +6,5 @@ name = "kinekino-slices"
 runtime = "claude-cloud"
 project = "kinekino"
 role = "implementer"
-trigger = { schedule = "CRON_TZ=Asia/Seoul 17 */3 * * *" }
+trigger = { schedule = "17 */3 * * *" }
 work = "roadmap"             # roadmap | bugs | public-surface | lane:<name>
