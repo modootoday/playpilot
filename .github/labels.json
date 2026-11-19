@@ -23,5 +23,15 @@
     "name": "needs-owner",
     "color": "b60205",
     "description": "Owner decision pending"
+  },
+  {
+    "name": "bug",
+    "color": "d73a4a",
+    "description": "Something does not work as documented"
+  },
+  {
+    "name": "dependencies",
+    "color": "0366d6",
+    "description": "Dependency update"
   }
 ]
