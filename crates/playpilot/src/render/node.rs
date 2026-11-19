@@ -115,6 +115,9 @@ pub fn wsl_unit(capacity: u32) -> String {
             "# Server mode exits after ~10 minutes without network; come back on our own.\n",
             "Restart=always\n",
             "RestartSec=30\n",
+            "# The server redraws a TUI about once a second; keep it out of the journal, keep errors.\n",
+            "StandardOutput=null\n",
+            "StandardError=journal\n",
             "\n",
             "[Install]\n",
             "WantedBy=default.target\n"
