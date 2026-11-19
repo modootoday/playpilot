@@ -1,0 +1,12 @@
+name: Owner decision
+description: A decision only the owner can make
+labels: [needs-owner]
+body:
+  - type: textarea
+    id: question
+    attributes: {label: Decision needed}
+    validations: {required: true}
+  - type: textarea
+    id: options
+    attributes: {label: Options and a recommendation}
+    validations: {required: true}

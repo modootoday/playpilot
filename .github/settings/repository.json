@@ -1,4 +1,15 @@
 {
+  "description": "Run Claude Code agents across your devices, cloud sessions and containers under one set of rules.",
+  "homepage": "https://playpilot.io",
+  "topics": [
+    "claude-code",
+    "claude-code-plugin",
+    "ai-agents",
+    "automation",
+    "github-actions",
+    "devops",
+    "rust"
+  ],
   "allow_squash_merge": true,
   "allow_merge_commit": false,
   "allow_rebase_merge": false,
@@ -7,5 +18,7 @@
   "allow_update_branch": true,
   "delete_branch_on_merge": true,
   "allow_auto_merge": true,
-  "has_wiki": false
+  "has_wiki": false,
+  "has_projects": false,
+  "has_discussions": false
 }
