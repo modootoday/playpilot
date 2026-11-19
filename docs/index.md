@@ -1,5 +1,5 @@
 ---
-title: playpilot
+title: Claude Code agents under one set of rules
 description: Run Claude Code agents across your devices, cloud sessions and containers under one set of rules.
 ---
 # playpilot
