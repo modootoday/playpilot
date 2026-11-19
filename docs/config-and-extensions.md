@@ -103,6 +103,6 @@ App installation (issues/labels write, contents read) and no Claude credentials.
 `playpilot validate | plan | render | whoami | claim | release | sync --check | node install | guard | migrate | events tail`
 
 - `plan`: who does what (device × lane × project × role), and what is uncovered.
-- `render`: writes `.claude/settings.json` (implemented: `render settings`), role files, systemd units,
+- `render`: writes `.claude/settings.json` (implemented: `render settings`, `render prompt`, `render node`), role files, systemd units,
   Task Scheduler XML and scheduled-task prompts from the config.
 - `whoami`: on a node, resolves its device id to roles, lanes and projects.

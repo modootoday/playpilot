@@ -12,4 +12,5 @@ cargo install --locked --path (Join-Path $repo 'crates\playpilot guard')
 $cfg = Join-Path $env:APPDATA 'fleet'
 New-Item -ItemType Directory -Force $cfg | Out-Null
 Copy-Item (Join-Path $repo 'profiles\node.settings.json') (Join-Path $cfg 'node.settings.json') -Force
-Write-Host "Next (owner, once): claude auth login; then register runtimes\windows\rc-server.ps1 with Task Scheduler (At log on, restart on failure)."
+Copy-Item (Join-Path $PSScriptRoot 'rc-server.ps1') (Join-Path $cfg 'rc-server.ps1') -Force
+Write-Host "Next (owner, once): claude auth login; then register the task from playpilot render node: Register-ScheduledTask -TaskName claude-rc -Xml (Get-Content -Raw claude-rc.xml)."
