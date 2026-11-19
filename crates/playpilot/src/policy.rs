@@ -48,14 +48,18 @@ impl Policy {
         if let Some(r) = check_trailers(line) {
             return Err(r);
         }
-        for segment in split_segments(line) {
+        let (line, shell_bodies) = take_heredocs(line);
+        for body in shell_bodies {
+            self.check_command_line(&body)?;
+        }
+        for segment in split_segments(&line) {
             let Some(words) = shlex::split(&segment) else {
                 // Unbalanced quotes: refuse rather than guess.
                 return Err(Refusal(format!(
                     "playpilot guard could not parse `{segment}`; rewrite it without unbalanced quotes"
                 )));
             };
-            self.check_words(&strip_env_prefix(&words))?;
+            self.check_words(&strip_redirections(&strip_env_prefix(&words)))?;
         }
         Ok(())
     }
@@ -110,9 +114,9 @@ impl Policy {
             }
             if let Some(v) = a.strip_prefix("--force-with-lease=") {
                 // H4: only the explicit `<branch>:<expected-sha>` form.
-                if v.split_once(':')
-                    .is_some_and(|(b, sha)| !b.is_empty() && sha.len() >= 7)
-                {
+                if v.split_once(':').is_some_and(|(b, sha)| {
+                    !b.is_empty() && (sha.len() >= 7 || sha.starts_with('$'))
+                }) {
                     lease = true;
                     continue;
                 }
@@ -269,6 +273,75 @@ fn check_trailers(line: &str) -> Option<Refusal> {
     None
 }
 
+/// Drops redirections (`2>&1`, `>/dev/null`, `> file`, `&>file`, `<in`).
+fn strip_redirections(words: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut skip_next = false;
+    for w in words {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        let body = w.trim_start_matches(|c: char| c.is_ascii_digit());
+        let op = ["&>>", "&>", ">>", ">&", "<&", ">", "<"]
+            .into_iter()
+            .find(|op| body.starts_with(op));
+        match op {
+            Some(op) if body.len() == op.len() => skip_next = true,
+            Some(_) => {}
+            None => out.push(w.clone()),
+        }
+    }
+    out
+}
+
+/// Removes heredoc bodies from `line`. Bodies fed to a shell (`sh`, `bash`,
+/// `zsh`) are returned to be checked as commands; other bodies are data.
+fn take_heredocs(line: &str) -> (String, Vec<String>) {
+    let mut kept = Vec::new();
+    let mut shell_bodies = Vec::new();
+    let mut lines = line.lines();
+    while let Some(l) = lines.next() {
+        kept.push(l.to_string());
+        let Some(pos) = l.find("<<") else { continue };
+        let rest = &l[pos + 2..];
+        if rest.starts_with('<') {
+            continue; // here-string
+        }
+        let dash = rest.starts_with('-');
+        let rest = rest.trim_start_matches('-').trim_start();
+        let word: String = rest
+            .trim_start_matches(['\'', '"', '\\'])
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+            .collect();
+        if word.is_empty() {
+            continue;
+        }
+        let mut body = Vec::new();
+        for b in lines.by_ref() {
+            let t = if dash { b.trim_start_matches('\t') } else { b };
+            if t.trim_end() == word {
+                break;
+            }
+            body.push(b.to_string());
+        }
+        let head = &l[..pos];
+        let consumer = head
+            .rsplit(['|', ';', '&'])
+            .next()
+            .unwrap_or(head)
+            .split_whitespace()
+            .find(|w| !w.contains('='))
+            .map(|w| w.rsplit('/').next().unwrap_or(w).to_string())
+            .unwrap_or_default();
+        if matches!(consumer.as_str(), "sh" | "bash" | "zsh" | "dash") {
+            shell_bodies.push(body.join("\n"));
+        }
+    }
+    (kept.join("\n"), shell_bodies)
+}
+
 /// Drops leading `VAR=value` assignments and `env`.
 fn strip_env_prefix(words: &[String]) -> Vec<String> {
     let mut i = 0;
@@ -325,6 +398,9 @@ fn split_segments(line: &str) -> Vec<String> {
             None => match c {
                 '\'' | '"' => {
                     quote = Some(c);
+                    cur.push(c);
+                }
+                '&' if cur.ends_with('>') || cur.ends_with('<') || chars.peek() == Some(&'>') => {
                     cur.push(c);
                 }
                 ';' | '\n' | '|' | '&' => {
