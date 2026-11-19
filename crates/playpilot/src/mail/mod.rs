@@ -1,13 +1,17 @@
 //! Fleet mailbox: actors exchange short messages with read and ack receipts.
 //!
-//! Layers: `message` (domain), `transport` (port), `github` (infrastructure),
-//! and the use cases below. The model follows the pmcp mailbox design
-//! (actors, send, inbox, read, ack, broadcast); nothing is shared with pmcp.
+//! Layers: `message` (domain), `transport` (port), `github` and `worker`
+//! (infrastructure), and the use cases below. The model follows the pmcp
+//! mailbox design (actors, send, inbox, read, ack, broadcast); nothing is
+//! shared with pmcp.
 
 pub mod cli;
 pub mod github;
 pub mod message;
 pub mod transport;
+pub mod worker;
+
+use std::fmt;
 
 use message::{Envelope, Stored, valid_actor};
 use transport::{Receipt, Transport};
@@ -35,6 +39,9 @@ pub fn send(t: &dyn Transport, envelope: Envelope) -> Result<Vec<(String, u64)>,
             envelope.to.clone(),
             t.send(&envelope.to, &envelope)?,
         )]);
+    }
+    if let Some(copies) = t.broadcast(&envelope) {
+        return copies;
     }
     let targets: Vec<String> = t
         .actors()?
@@ -110,4 +117,51 @@ pub fn days_ago(now_secs: u64, days: u64) -> String {
 
 pub fn mark(t: &dyn Transport, id: u64, kind: Receipt) -> Result<(), String> {
     t.receipt(id, kind)
+}
+
+/// Where the mailboxes are: the Worker when `PLAYPILOT_MAIL_URL` is set,
+/// otherwise the GitHub repository.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Backend {
+    Worker { url: String },
+    GitHub { repo: String },
+}
+
+impl Backend {
+    pub fn choose(url: Option<String>, repo: Option<String>) -> Option<Self> {
+        let set = |v: Option<String>| v.filter(|s| !s.trim().is_empty());
+        match (set(url), set(repo)) {
+            (Some(url), _) => Some(Backend::Worker { url }),
+            (None, Some(repo)) => Some(Backend::GitHub { repo }),
+            (None, None) => None,
+        }
+    }
+
+    /// `choose` from the environment; `repo` is the `--repo` value or
+    /// `PLAYPILOT_MAILBOX_REPO`.
+    pub fn from_env(repo: Option<String>) -> Option<Self> {
+        Self::choose(std::env::var("PLAYPILOT_MAIL_URL").ok(), repo)
+    }
+
+    pub fn open(&self, actor: Option<String>) -> Box<dyn Transport> {
+        match self {
+            Backend::Worker { url } => Box::new(worker::Worker::new(
+                worker::Curl {
+                    url: url.clone(),
+                    token: std::env::var("PLAYPILOT_MCP_TOKEN").ok(),
+                },
+                actor,
+            )),
+            Backend::GitHub { repo } => Box::new(github::GitHub { repo: repo.clone() }),
+        }
+    }
+}
+
+impl fmt::Display for Backend {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Backend::Worker { url } => write!(f, "worker {url}"),
+            Backend::GitHub { repo } => write!(f, "github {repo}"),
+        }
+    }
 }

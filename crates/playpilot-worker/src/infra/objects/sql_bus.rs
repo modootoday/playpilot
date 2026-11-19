@@ -6,7 +6,7 @@ use worker::{SqlStorage, SqlStorageValue};
 use crate::domain::bus::message::{Envelope, Receipt, Stored};
 use crate::domain::bus::store::BusStore;
 
-const SCHEMA: [&str; 3] = [
+const SCHEMA: [&str; 4] = [
     "CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         mailbox TEXT NOT NULL, created_at INTEGER NOT NULL,
@@ -16,6 +16,7 @@ const SCHEMA: [&str; 3] = [
     "CREATE INDEX IF NOT EXISTS messages_mailbox ON messages (mailbox, created_at)",
     "CREATE TABLE IF NOT EXISTS events (
         key TEXT PRIMARY KEY, received_at INTEGER NOT NULL, json TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS wakes (actor TEXT PRIMARY KEY, fired_at INTEGER NOT NULL)",
 ];
 
 const COLUMNS: &str =
@@ -63,6 +64,11 @@ struct Name {
 #[derive(Deserialize)]
 struct Id {
     id: f64,
+}
+
+#[derive(Deserialize)]
+struct Fired {
+    fired_at: f64,
 }
 
 pub struct SqlBus {
@@ -162,5 +168,31 @@ impl BusStore for SqlBus {
             )
             .map_err(s)?;
         Ok(cursor.rows_written() > 0)
+    }
+
+    fn last_wake(&self, actor: &str) -> Result<Option<u64>, String> {
+        let rows: Vec<Fired> = self
+            .sql
+            .exec(
+                "SELECT fired_at FROM wakes WHERE actor = ?",
+                vec![actor.into()],
+            )
+            .and_then(|c| c.to_array())
+            .map_err(s)?;
+        Ok(rows.first().map(|r| r.fired_at as u64))
+    }
+
+    fn set_last_wake(&self, actor: &str, at: Option<u64>) -> Result<(), String> {
+        let result = match at {
+            Some(t) => self.sql.exec(
+                "INSERT INTO wakes (actor, fired_at) VALUES (?, ?)
+                 ON CONFLICT(actor) DO UPDATE SET fired_at = excluded.fired_at",
+                vec![actor.into(), int(t)],
+            ),
+            None => self
+                .sql
+                .exec("DELETE FROM wakes WHERE actor = ?", vec![actor.into()]),
+        };
+        result.map(|_| ()).map_err(s)
     }
 }

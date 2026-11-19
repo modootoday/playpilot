@@ -36,7 +36,7 @@ fn main() -> ExitCode {
             eprintln!("usage: playpilot guard");
             eprintln!("       playpilot mail <send|inbox|read|ack> ... (playpilot mail --help)");
             eprintln!(
-                "       playpilot mcp   (MCP server on stdio; env PLAYPILOT_MAILBOX_REPO, PLAYPILOT_ACTOR)"
+                "       playpilot mcp   (MCP server on stdio; env PLAYPILOT_MAIL_URL or PLAYPILOT_MAILBOX_REPO, PLAYPILOT_ACTOR)"
             );
             eprintln!("       playpilot claim|release <owner/repo#n> ... (playpilot claim --help)");
             eprintln!("       playpilot validate <fleet-dir>");

@@ -1,5 +1,7 @@
 //! The tool set of the local `playpilot mcp`, with the same names, parsed
-//! into commands. Arguments never name the caller: unknown keys are refused.
+//! into commands. Credentials decide who the caller may be; the only
+//! identity argument is `as`, which picks one of the actors the credential
+//! allows. Other unknown keys are refused.
 
 use serde_json::{Value, json};
 
@@ -38,7 +40,18 @@ pub enum Command {
     Whoami,
 }
 
-fn schema(props: Value, required: &[&str]) -> Value {
+/// A parsed tool call and the actor it asks to act as.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Invocation {
+    pub command: Command,
+    pub as_actor: Option<String>,
+}
+
+fn schema(mut props: Value, required: &[&str]) -> Value {
+    props["as"] = json!({
+        "type": "string",
+        "description": "actor to act as; required when the credential stands for several actors"
+    });
     json!({"type": "object", "properties": props, "required": required, "additionalProperties": false})
 }
 
@@ -87,7 +100,7 @@ pub fn list() -> Vec<Value> {
         }),
         json!({
             "name": "whoami",
-            "description": "Show the actor and claim id the Worker maps this caller's service token to.",
+            "description": "Show the actors and claim id this caller's credential allows.",
             "inputSchema": schema(json!({}), &[]),
             "annotations": {"readOnlyHint": true}
         }),
@@ -112,7 +125,17 @@ fn item_arg(args: &Value) -> Result<ItemRef, String> {
 }
 
 /// Parses validated arguments for `name` (a listed tool).
-pub fn parse(name: &str, args: &Value) -> Result<Command, String> {
+pub fn parse(name: &str, args: &Value) -> Result<Invocation, String> {
+    let command = parse_command(name, args)?;
+    let as_actor = match args.get("as") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(a)) if !a.trim().is_empty() => Some(a.trim().to_string()),
+        Some(_) => return Err("`as` must be an actor name".into()),
+    };
+    Ok(Invocation { command, as_actor })
+}
+
+fn parse_command(name: &str, args: &Value) -> Result<Command, String> {
     let obj = args.as_object().ok_or("arguments must be an object")?;
     let allowed: Vec<String> = list()
         .iter()
@@ -197,8 +220,36 @@ pub fn render_claim(item: &ItemRef, outcome: Result<Lease, LeaseError>) -> Resul
     }
 }
 
-pub fn render_whoami(actor: &str, claim: &str) -> String {
-    format!("actor: {actor}\nclaim id: {claim}\nbackend: worker")
+/// `actors` the credential allows; `current` is the resolved identity when
+/// the call named one (or only one is allowed).
+pub fn render_whoami(actors: &[String], current: Option<(&str, &str)>) -> String {
+    let mut s = format!("actors: {}\n", actors.join(", "));
+    if let Some((actor, claim)) = current {
+        s.push_str(&format!("actor: {actor}\nclaim id: {claim}\n"));
+    }
+    s.push_str("backend: worker");
+    s
+}
+
+/// Machine-readable inbox for clients (MCP `structuredContent`).
+pub fn inbox_structured(messages: &[Stored]) -> Value {
+    let list: Vec<Value> = messages
+        .iter()
+        .map(|m| {
+            json!({
+                "id": m.id,
+                "created_at": rfc3339(m.created_at),
+                "from": m.envelope.from,
+                "to": m.envelope.to,
+                "subject": m.envelope.subject,
+                "re": m.envelope.re,
+                "body": m.envelope.body,
+                "read": m.read,
+                "acked": m.acked,
+            })
+        })
+        .collect();
+    json!({ "messages": list })
 }
 
 #[cfg(test)]
@@ -228,6 +279,12 @@ mod tests {
     #[test]
     fn refuses_identity_in_arguments() {
         let args = json!({"to": "b", "subject": "s", "body": "x", "from": "node-z"});
+        let ok = json!({"to": "b", "subject": "s", "body": "x", "as": "node-a"});
+        assert_eq!(
+            parse("mail_send", &ok).unwrap().as_actor.as_deref(),
+            Some("node-a")
+        );
+        assert!(parse("whoami", &json!({"as": 5})).is_err());
         assert_eq!(
             parse("mail_send", &args),
             Err("unknown argument `from`".into())
@@ -237,7 +294,9 @@ mod tests {
 
     #[test]
     fn parses_claims() {
-        let c = parse("task_claim", &json!({"item": "o/r#4", "ttl": "30m"})).unwrap();
+        let c = parse("task_claim", &json!({"item": "o/r#4", "ttl": "30m"}))
+            .unwrap()
+            .command;
         let item = ItemRef {
             repo: "o/r".into(),
             number: 4,
@@ -254,7 +313,8 @@ mod tests {
             "task_claim",
             &json!({"item": "o/r#4", "stale_hours": 2, "lane": "build"}),
         )
-        .unwrap();
+        .unwrap()
+        .command;
         assert_eq!(
             c,
             Command::TaskClaim {
@@ -271,11 +331,11 @@ mod tests {
     #[test]
     fn parses_mail() {
         assert_eq!(
-            parse("mail_inbox", &json!({})),
+            parse("mail_inbox", &json!({})).map(|i| i.command),
             Ok(Command::MailInbox { all: false })
         );
         assert_eq!(
-            parse("mail_ack", &json!({"id": 5})),
+            parse("mail_ack", &json!({"id": 5})).map(|i| i.command),
             Ok(Command::MailAck { id: 5 })
         );
         assert!(parse("mail_send", &json!({"to": "b", "subject": "s"})).is_err());
@@ -298,6 +358,26 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("held by node-b"));
-        assert!(render_whoami("a", "node-a").contains("claim id: node-a"));
+        let who = render_whoami(&["a".into(), "b".into()], Some(("a", "node-a")));
+        assert!(who.contains("actors: a, b") && who.contains("claim id: node-a"));
+        assert!(!render_whoami(&["a".into(), "b".into()], None).contains("claim id"));
+        let m = Stored {
+            id: 4,
+            mailbox: "b".into(),
+            created_at: 0,
+            envelope: crate::domain::bus::message::Envelope {
+                from: "a".into(),
+                to: "b".into(),
+                subject: "s".into(),
+                re: None,
+                body: "x".into(),
+            },
+            read: true,
+            acked: false,
+        };
+        let v = inbox_structured(&[m]);
+        assert_eq!(v["messages"][0]["id"], 4);
+        assert_eq!(v["messages"][0]["created_at"], "1970-01-01T00:00:00Z");
+        assert_eq!(v["messages"][0]["read"], true);
     }
 }

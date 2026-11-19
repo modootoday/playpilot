@@ -12,7 +12,8 @@ use crate::mail::transport::{Receipt, Transport};
 pub struct MailTools<'a> {
     pub transport: Option<&'a dyn Transport>,
     pub actor: Option<String>,
-    pub repo: Option<String>,
+    /// Where the mailboxes are, for `whoami` (`worker <url>` or `github <repo>`).
+    pub mailbox: Option<String>,
     /// Lane-item claims; the claim id comes from the environment like the actor.
     pub tracker: Option<&'a dyn Tracker>,
     pub claim_id: Option<String>,
@@ -59,7 +60,7 @@ fn str_arg<'v>(args: &'v Value, key: &str) -> Option<&'v str> {
 impl MailTools<'_> {
     fn ready(&self) -> Result<(&dyn Transport, &str), String> {
         let t = self.transport.ok_or(
-            "PLAYPILOT_MAILBOX_REPO is not set for this MCP server (owner/name of the mailbox repository)",
+            "no mailbox is configured for this MCP server: set PLAYPILOT_MAIL_URL (Worker /mcp URL) or PLAYPILOT_MAILBOX_REPO (owner/name of the mailbox repository)",
         )?;
         let a = self.actor.as_deref().ok_or(
             "PLAYPILOT_ACTOR is not set for this MCP server (this session's mailbox name)",
@@ -118,7 +119,7 @@ impl Tools for MailTools<'_> {
             }),
             json!({
                 "name": "whoami",
-                "description": "Show this session's actor and mailbox repository.",
+                "description": "Show this session's actor and where its mailbox is.",
                 "inputSchema": schema(json!({}), &[]),
                 "annotations": {"readOnlyHint": true}
             }),
@@ -128,11 +129,11 @@ impl Tools for MailTools<'_> {
     fn call(&self, name: &str, args: &Value) -> Result<String, String> {
         if name == "whoami" {
             return Ok(format!(
-                "actor: {}\nmailbox repository: {}\nclaim id: {}",
+                "actor: {}\nmailbox: {}\nclaim id: {}",
                 self.actor.as_deref().unwrap_or("(PLAYPILOT_ACTOR not set)"),
-                self.repo
+                self.mailbox
                     .as_deref()
-                    .unwrap_or("(PLAYPILOT_MAILBOX_REPO not set)"),
+                    .unwrap_or("(PLAYPILOT_MAIL_URL and PLAYPILOT_MAILBOX_REPO not set)"),
                 self.claim_id
                     .as_deref()
                     .unwrap_or("(PLAYPILOT_CLAIM_ID not set)")

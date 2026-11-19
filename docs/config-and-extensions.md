@@ -94,11 +94,55 @@ every call but the public `GET /v1/state` subset sends the
 `GET /v1/config`, `POST /v1/leases`, `DELETE /v1/leases/{id}`,
 `POST /v1/nodes/{id}/heartbeat`, `POST /v1/events`, `GET /v1/state`.
 Access: Cloudflare Access service tokens per node. The Worker holds a GitHub
-App installation (issues/labels write, contents read) and no Claude credentials.
+App installation (issues/labels write, contents read) and, only for waking
+sessions, per-task routine tokens (below); no other Claude credentials.
 The Worker lives in `crates/playpilot-worker` (Durable Objects `LeaseObject`,
 `NodeObject`, `BusObject`, plus a remote MCP endpoint `POST /mcp` with the
-local `playpilot mcp` tool names); the caller's actor and claim id come from
-its service token, never from the request. Build with `worker-build --release`.
+local `playpilot mcp` tool names). Build with `worker-build --release`.
+
+### Fleet mailbox
+
+Transports. `playpilot mail` and the local `playpilot mcp` use the Worker when
+`PLAYPILOT_MAIL_URL` is set (e.g. `https://mail.example.invalid/mcp`), and
+otherwise the GitHub transport (draft pull requests in
+`PLAYPILOT_MAILBOX_REPO`). The Worker transport speaks JSON-RPC to `/mcp`
+through `curl`; the actor is `PLAYPILOT_ACTOR`, sent as the `as` argument.
+
+Auth. Access can only read a service token from its own header pair, while
+cloud sessions can only inject `Authorization: Bearer <secret>`. So `/mcp` is
+served on a separate host without Access, and the Worker checks the bearer
+token itself (on any host; Access headers are ignored on `/mcp`). The secret
+`PLAYPILOT_MCP_TOKENS` maps the SHA-256 hex of each token to what it allows:
+
+```json
+{"<sha256 hex of token>": {"actors": ["node-a", "node-b"], "claim": "cloud-a"}}
+```
+
+A missing or unknown token gets a bare `401`. One token may stand for
+several actors (cloud sessions share one environment); a call then must name
+its actor with `as`, which must be in `actors`. With one actor, `as` is
+implied. `whoami` lists the allowed actors. The lease holder is `claim`, or
+the actor when unset. Locally, `PLAYPILOT_MCP_TOKEN` supplies the token; in a
+cloud session the environment's credential for the Worker host does.
+Route only `/mcp*` to the Worker on that host: `/v1/*` still relies on
+Access in front of it.
+
+Wake. A cloud session can only be woken by firing its scheduled task, which
+starts a new session. The optional secret `PLAYPILOT_WAKE` maps actors to a
+routine and its per-task token:
+
+```json
+{"node-a": {"routine": "<routine id>", "token": "<per-task token>"}}
+```
+
+After `mail_send` stores its copies, each recipient with an entry is woken
+with the text `playpilot mail: <n> unacked message(s) for <actor>; read them
+with the playpilot mail tools (mail_inbox) and handle them.` Message content
+never goes into the fire text; the new session reads it with `mail_inbox`.
+`BusObject` fires at most once per actor per 10 minutes while that actor
+still has unacked mail; acking everything resets the window. Upstream limits
+are 30 fires per hour per task and 100 per hour per account, with no
+idempotency key; a failed or `429` fire is logged and never fails the send.
 
 ## 6. Change control
 
