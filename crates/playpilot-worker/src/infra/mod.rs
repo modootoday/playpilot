@@ -1,6 +1,7 @@
 //! Workers runtime bindings: the fetch entry point, the router and the three
 //! Durable Object classes. Logic lives in `crate::domain`.
 
+mod access;
 mod api;
 mod auth;
 mod call;
@@ -25,7 +26,7 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         };
     }
     let caller = if route.auth() == Auth::Access {
-        match auth::identify(&req, &env) {
+        match auth::identify(&req, &env).await {
             Ok(id) => Some(id),
             Err(resp) => return resp,
         }
@@ -36,7 +37,7 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         (Route::State, _) => api::state(&env).await,
         (Route::NotFound, _) => http::problem(404, "Not found", "no such endpoint"),
         (Route::MethodNotAllowed(allow), _) => http::method_not_allowed(allow),
-        (Route::Config, Some(_)) => api::config(&req, &env),
+        (Route::Config, Some(_)) => api::config(&req, &env).await,
         (Route::CreateLease, Some(id)) => api::create_lease(req, &env, &id).await,
         (Route::ReleaseLease(lease), Some(id)) => api::release_lease(&env, &id, &lease).await,
         (Route::Heartbeat(node), Some(id)) => api::heartbeat(req, &env, &id, &node).await,

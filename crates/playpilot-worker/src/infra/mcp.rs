@@ -113,7 +113,8 @@ async fn run_text(
         }
         Command::TaskClaim { item, lane, ttl } => {
             let ttl = clamp_ttl(ttl).map_err(|e| e.detail())?;
-            let switches = settings::switches(env)?;
+            let compiled = settings::config(env).await.ok();
+            let switches = settings::switches(env, compiled.as_ref())?;
             let limits = Limits {
                 lane: switches.effective("Lane", &lane),
                 device: switches.effective("Device", &me.claim),

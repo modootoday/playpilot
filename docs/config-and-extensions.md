@@ -100,6 +100,22 @@ The Worker lives in `crates/playpilot-worker` (Durable Objects `LeaseObject`,
 `NodeObject`, `BusObject`, plus a remote MCP endpoint `POST /mcp` with the
 local `playpilot mcp` tool names). Build with `worker-build --release`.
 
+Access check. The Worker does not trust Access headers as such: on `/v1/*`
+it verifies `Cf-Access-Jwt-Assertion` (RS256, signed by a key from
+`https://<team domain>/cdn-cgi/access/certs`, cached per isolate for 10
+minutes; `iss` is `https://<team domain>`, `aud` contains the application's
+AUD tag, `exp`/`nbf` with 60 s skew) and takes the caller from the token's
+`common_name`, the service token client id, which keys
+`PLAYPILOT_IDENTITIES`. Set `PLAYPILOT_ACCESS_TEAM_DOMAIN` (bare host, e.g.
+`example.cloudflareaccess.com`) and `PLAYPILOT_ACCESS_AUD`; while either is
+unset, or the token fails any check, every `/v1/*` call except the public
+`GET /v1/state` gets `401`.
+
+Compiled config. Text bindings stop near 5.1 kB, so the compiled config goes
+in a KV namespace bound as `CONFIG`, key `config.json`. When that binding
+exists it is authoritative (a missing key is an error, not a fall back);
+without it the Worker reads the `PLAYPILOT_CONFIG` var or secret.
+
 ### Fleet mailbox
 
 Transports. `playpilot mail` and the local `playpilot mcp` use the Worker when

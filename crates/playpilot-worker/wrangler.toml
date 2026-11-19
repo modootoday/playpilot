@@ -1,9 +1,23 @@
 # Phase B Worker. Placeholder names only: the owner adds routes, the account
-# and the Access application when deploying. Set PLAYPILOT_IDENTITIES,
-# PLAYPILOT_CONFIG and (optionally) PLAYPILOT_OPS as secrets or vars at deploy.
-# `/mcp` is served on a second host without Access: set PLAYPILOT_MCP_TOKENS
+# and the Access application when deploying. Set PLAYPILOT_IDENTITIES and
+# (optionally) PLAYPILOT_OPS as secrets or vars at deploy.
+#
+# /v1/* (behind Access): the Worker verifies Cf-Access-Jwt-Assertion itself.
+# Set both vars, or every /v1/* call except the public GET /v1/state is 401:
+#   PLAYPILOT_ACCESS_TEAM_DOMAIN  bare host, e.g. example.cloudflareaccess.com
+#                                 (issuer https://<host>, keys from
+#                                 https://<host>/cdn-cgi/access/certs)
+#   PLAYPILOT_ACCESS_AUD          the Access application's AUD tag
+# PLAYPILOT_IDENTITIES is keyed by the JWT common_name (service token client id).
+#
+# Compiled config: a text binding stops near 5.1 kB, so prefer the KV
+# namespace bound as CONFIG with the JSON under the key config.json (example
+# below). When CONFIG is bound it is authoritative; without it the Worker
+# reads the PLAYPILOT_CONFIG var or secret.
+#
+# /mcp is served on a second host without Access: set PLAYPILOT_MCP_TOKENS
 # (token hashes to actors) and, for wake on mail, PLAYPILOT_WAKE as secrets.
-# Route only `/mcp*` on that host; `/v1/*` relies on Access headers.
+# Route only /mcp* on that host; /v1/* relies on Access in front of it.
 name = "playpilot"
 main = "build/index.js"
 compatibility_date = "2026-11-01"
@@ -13,6 +27,10 @@ command = "cargo install -q worker-build && worker-build --release"
 
 [vars]
 PLAYPILOT_OFFLINE_MINUTES = "10"
+
+# [[kv_namespaces]]
+# binding = "CONFIG"
+# id = "<namespace id>"
 
 [[durable_objects.bindings]]
 name = "LEASES"
@@ -35,6 +53,10 @@ name = "playpilot-stage"
 
 [env.stage.vars]
 PLAYPILOT_OFFLINE_MINUTES = "10"
+
+# [[env.stage.kv_namespaces]]
+# binding = "CONFIG"
+# id = "<stage namespace id>"
 
 [[env.stage.durable_objects.bindings]]
 name = "LEASES"
