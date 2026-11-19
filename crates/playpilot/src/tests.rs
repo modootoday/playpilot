@@ -467,3 +467,103 @@ fn refuses_pushing_a_known_local_tag() {
     assert!(decide(&p, &bash("git push origin stable")).is_err());
     assert!(decide(&p, &bash("git push origin claude/stable-docs")).is_ok());
 }
+
+mod render_rules {
+    use crate::render::{GuardSpec, guard_command, guard_spec, lock_rev, merge_settings};
+    use crate::validate::parse;
+
+    const REV: &str = "0123456789abcdef0123456789abcdef01234567";
+
+    fn spec() -> GuardSpec {
+        GuardSpec {
+            rev: REV.into(),
+            protected: vec!["main".into(), "codex/rust".into()],
+        }
+    }
+
+    #[test]
+    fn reads_the_lock_rev() {
+        assert_eq!(
+            lock_rev(&format!("version = \"unreleased\"\nrev = \"{REV}\"\n")).unwrap(),
+            REV
+        );
+        assert!(lock_rev("rev = \"abc\"").is_err());
+        assert!(lock_rev("version = \"x\"").is_err());
+    }
+
+    #[test]
+    fn builds_the_spec_from_the_project() {
+        let p = parse(
+            "p.toml",
+            "apiVersion = \"playpilot.io/v1\"\nkind = \"Project\"\n[metadata]\nname = \"k\"\n[spec]\nprotected = [\"main\"]\n",
+        )
+        .unwrap();
+        let s = guard_spec(std::slice::from_ref(&p), "k", REV.into()).unwrap();
+        assert_eq!(s.protected, vec!["main".to_string()]);
+        assert!(guard_spec(std::slice::from_ref(&p), "other", REV.into()).is_err());
+        let bad = parse(
+            "b.toml",
+            "apiVersion = \"playpilot.io/v1\"\nkind = \"Project\"\n[metadata]\nname = \"b\"\n[spec]\nprotected = [\"main; rm -rf /\"]\n",
+        )
+        .unwrap();
+        assert!(guard_spec(&[bad], "b", REV.into()).is_err());
+    }
+
+    #[test]
+    fn command_pins_the_rev_and_branches() {
+        let c = guard_command(&spec());
+        assert!(c.contains(&format!("R={REV};")));
+        assert!(c.contains("PLAYPILOT_PROTECTED_BRANCHES=main,codex/rust exec"));
+        assert!(c.contains("exit 2"));
+        let words = shlex::split(&c).unwrap();
+        assert_eq!(words[..2], ["sh".to_string(), "-c".to_string()]);
+    }
+
+    #[test]
+    fn writes_fresh_settings() {
+        let out = merge_settings(None, &spec()).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let hook = &v["hooks"]["PreToolUse"][0];
+        assert_eq!(hook["matcher"], "Bash|PowerShell");
+        assert_eq!(hook["hooks"][0]["timeout"], 240);
+        assert!(out.ends_with("}\n"));
+    }
+
+    #[test]
+    fn replaces_an_old_guard_and_keeps_everything_else() {
+        let old = r#"{
+  "permissions": {"allow": ["Bash(ls)"]},
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "Edit", "hooks": [{"type": "command", "command": "lint-edit"}]},
+      {"matcher": "Bash|PowerShell", "hooks": [{"type": "command", "command": "sh -c 'exec playpilot guard'", "timeout": 240}]}
+    ],
+    "Stop": [{"hooks": [{"type": "command", "command": "notify"}]}]
+  },
+  "env": {"PLAYPILOT_PROTECTED_BRANCHES": "main", "OTHER": "1"}
+}"#;
+        let out = merge_settings(Some(old), &spec()).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let keys: Vec<_> = v.as_object().unwrap().keys().cloned().collect();
+        assert_eq!(keys, ["permissions", "hooks", "env"]);
+        let pre = v["hooks"]["PreToolUse"].as_array().unwrap();
+        assert_eq!(pre.len(), 2);
+        assert_eq!(pre[0]["hooks"][0]["command"], "lint-edit");
+        assert!(
+            pre[1]["hooks"][0]["command"]
+                .as_str()
+                .unwrap()
+                .contains(REV)
+        );
+        assert_eq!(v["hooks"]["Stop"][0]["hooks"][0]["command"], "notify");
+        assert_eq!(v["env"], serde_json::json!({"OTHER": "1"}));
+        // Rendering twice changes nothing.
+        assert_eq!(merge_settings(Some(&out), &spec()).unwrap(), out);
+    }
+
+    #[test]
+    fn refuses_settings_that_are_not_an_object() {
+        assert!(merge_settings(Some("[]"), &spec()).is_err());
+        assert!(merge_settings(Some("{"), &spec()).is_err());
+    }
+}

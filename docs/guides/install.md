@@ -23,3 +23,16 @@ a Windows user account, or a container.
 
 Cloud sessions do not load plugins. They get the same guard from the
 `.claude/settings.json` that `playpilot render` writes into each repository.
+
+From the fleet configuration repository (it holds `fleet/` and
+`playpilot.lock`), write or check a project's hook:
+
+```
+playpilot render settings --project <name> --repo <project checkout>
+playpilot render settings --project <name> --repo <project checkout> --check
+```
+
+The rendered hook pins the rev from `playpilot.lock`, takes the protected
+branches from the `Project` resource, reinstalls the CLI when the recorded rev
+differs, and blocks the tool call when no CLI can run. Other settings and
+hooks in the file are kept.

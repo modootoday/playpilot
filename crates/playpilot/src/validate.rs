@@ -65,7 +65,7 @@ pub fn parse(file: &str, text: &str) -> Result<Resource, String> {
     })
 }
 
-fn strings(spec: &Table, key: &str) -> Vec<String> {
+pub fn strings(spec: &Table, key: &str) -> Vec<String> {
     spec.get(key)
         .and_then(Value::as_array)
         .map(|a| {

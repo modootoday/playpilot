@@ -6,6 +6,7 @@
 mod history;
 mod mail;
 mod policy;
+mod render;
 mod surface;
 mod validate;
 
@@ -19,6 +20,7 @@ fn main() -> ExitCode {
         Some("history-check") => history_check(std::env::args().skip(2).collect()),
         Some("surface-check") => surface_check(std::env::args().skip(2).collect()),
         Some("validate") => validate_dir(std::env::args().nth(2)),
+        Some("render") => render_cmd(std::env::args().skip(2).collect()),
         Some("--version" | "-V") => {
             println!("playpilot {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
@@ -27,6 +29,7 @@ fn main() -> ExitCode {
             eprintln!("usage: playpilot guard");
             eprintln!("       playpilot mail <send|inbox|read|ack> ... (playpilot mail --help)");
             eprintln!("       playpilot validate <fleet-dir>");
+            eprintln!("       {RENDER_USAGE}");
             eprintln!(
                 "       playpilot surface-check --range <base>..<head> [--text-env NAME]... [--deny-env NAME]"
             );
@@ -108,6 +111,86 @@ fn validate_dir(dir: Option<String>) -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::from(1)
+    }
+}
+
+const RENDER_USAGE: &str =
+    "playpilot render settings --project <name> [--config <dir>] [--repo <dir>] [--check]";
+
+/// `playpilot render settings`: writes or checks `<repo>/.claude/settings.json`.
+/// `--config` is the fleet configuration repository (holds `fleet/` and
+/// `playpilot.lock`); both directories default to the current one.
+fn render_cmd(args: Vec<String>) -> ExitCode {
+    let mut it = args.into_iter();
+    if it.next().as_deref() != Some("settings") {
+        eprintln!("usage: {RENDER_USAGE}");
+        return ExitCode::from(64);
+    }
+    let (mut project, mut config, mut repo, mut check) =
+        (None, ".".to_string(), ".".to_string(), false);
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--project" => project = it.next(),
+            "--config" => config = it.next().unwrap_or_default(),
+            "--repo" => repo = it.next().unwrap_or_default(),
+            "--check" => check = true,
+            _ => {
+                eprintln!("usage: {RENDER_USAGE}");
+                return ExitCode::from(64);
+            }
+        }
+    }
+    let Some(project) = project else {
+        eprintln!("usage: {RENDER_USAGE}");
+        return ExitCode::from(64);
+    };
+    let config = std::path::Path::new(&config);
+    let target = std::path::Path::new(&repo)
+        .join(".claude")
+        .join("settings.json");
+    let result = (|| -> Result<(String, Option<String>), String> {
+        let lock = std::fs::read_to_string(config.join("playpilot.lock"))
+            .map_err(|e| format!("{}: {e}", config.join("playpilot.lock").display()))?;
+        let rev = render::lock_rev(&lock)?;
+        let resources = validate::read_dir(&config.join("fleet")).map_err(|e| e.join("\n"))?;
+        let spec = render::guard_spec(&resources, &project, rev)?;
+        let existing = std::fs::read_to_string(&target).ok();
+        let text = render::merge_settings(existing.as_deref(), &spec)?;
+        Ok((text, existing))
+    })();
+    let (text, existing) = match result {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("render: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    if existing.as_deref() == Some(text.as_str()) {
+        println!("render: {} is up to date", target.display());
+        return ExitCode::SUCCESS;
+    }
+    if check {
+        println!(
+            "render: {} is stale; run `playpilot render settings`",
+            target.display()
+        );
+        return ExitCode::from(1);
+    }
+    if let Some(dir) = target.parent()
+        && let Err(e) = std::fs::create_dir_all(dir)
+    {
+        eprintln!("render: {}: {e}", dir.display());
+        return ExitCode::from(1);
+    }
+    match std::fs::write(&target, text) {
+        Ok(()) => {
+            println!("render: wrote {}", target.display());
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("render: {}: {e}", target.display());
+            ExitCode::from(1)
+        }
     }
 }
 
