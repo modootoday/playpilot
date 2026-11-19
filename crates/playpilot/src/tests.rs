@@ -850,3 +850,97 @@ mod claim_rules {
         assert!(claim(&r, ITEM, "Bad Id", "2026-11-19T12:00:00Z", 6).is_err());
     }
 }
+
+mod plan_rules {
+    use crate::plan::{plan, whoami};
+    use crate::validate::parse;
+
+    fn r(kind: &str, name: &str, spec: &str) -> crate::validate::Resource {
+        let text = format!(
+            "apiVersion = \"playpilot.io/v1\"\nkind = \"{kind}\"\n[metadata]\nname = \"{name}\"\n[spec]\n{spec}\n"
+        );
+        parse("t.toml", &text).unwrap()
+    }
+
+    fn fleet() -> Vec<crate::validate::Resource> {
+        vec![
+            r(
+                "Lane",
+                "heavy-build",
+                "label = \"needs-heavy-build\"\nrequires = [\"build:heavy\"]",
+            ),
+            r(
+                "Lane",
+                "windows-run",
+                "label = \"needs-windows-run\"\nrequires = [\"os:windows\"]",
+            ),
+            r(
+                "Lane",
+                "gui-check",
+                "label = \"needs-gui-check\"\nrequires = [\"gui\"]",
+            ),
+            r("Role", "builder", "agent = \"playpilot:heavy-builder\""),
+            r(
+                "Device",
+                "node-1",
+                "claimId = \"node-a\"\ncapabilities = [\"build:heavy\", \"os:windows\"]\nroles = [\"builder\"]\nprimaryLanes = [\"heavy-build\"]",
+            ),
+            r(
+                "Project",
+                "alpha",
+                "lanes = [\"heavy-build\", \"windows-run\", \"gui-check\"]",
+            ),
+            r("Project", "beta", "lanes = []"),
+            r(
+                "Session",
+                "alpha-slices",
+                "project = \"alpha\"\nruntime = \"claude-cloud\"\nrole = \"builder\"\ntrigger = { schedule = \"45 */4 * * *\" }",
+            ),
+        ]
+    }
+
+    #[test]
+    fn plan_lists_lanes_sessions_and_gaps() {
+        let p = plan(&fleet());
+        assert!(
+            p.contains(
+                "heavy-build [needs-heavy-build]: primary node-1; fallback none; projects alpha"
+            ),
+            "{p}"
+        );
+        assert!(
+            p.contains("windows-run [needs-windows-run]: primary none; fallback node-1"),
+            "{p}"
+        );
+        assert!(
+            p.contains("alpha-slices: alpha on claude-cloud, role builder, 45 */4 * * *"),
+            "{p}"
+        );
+        assert!(
+            p.contains("lane gui-check is used by alpha but no device can serve it"),
+            "{p}"
+        );
+        assert!(
+            p.contains("lane windows-run has only fallback devices"),
+            "{p}"
+        );
+        assert!(p.contains("project beta has no session"), "{p}");
+    }
+
+    #[test]
+    fn whoami_shows_one_device() {
+        let w = whoami(&fleet(), "node-1").unwrap();
+        assert!(w.contains("claim id: node-a"), "{w}");
+        assert!(w.contains("builder (playpilot:heavy-builder)"), "{w}");
+        assert!(
+            w.contains("heavy-build [needs-heavy-build] primary: alpha"),
+            "{w}"
+        );
+        assert!(
+            w.contains("windows-run [needs-windows-run] fallback: alpha"),
+            "{w}"
+        );
+        assert!(!w.contains("gui-check"), "{w}");
+        assert!(whoami(&fleet(), "nope").is_err());
+    }
+}
