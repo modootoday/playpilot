@@ -281,3 +281,145 @@ mod validate_rules {
         assert_eq!(p.len(), 2, "{p:?}");
     }
 }
+
+mod mail_rules {
+    use std::cell::RefCell;
+
+    use crate::mail::github::stored_from_comment;
+    use crate::mail::message::{Envelope, Stored, valid_actor};
+    use crate::mail::transport::{Receipt, Transport};
+    use crate::mail::{days_ago, inbox, send};
+
+    fn env(from: &str, to: &str) -> Envelope {
+        Envelope {
+            from: from.into(),
+            to: to.into(),
+            subject: "s".into(),
+            re: Some("org/repo#1".into()),
+            body: "line one\nline two".into(),
+        }
+    }
+
+    #[test]
+    fn envelope_round_trips_and_rejects_other_comments() {
+        let e = env("kinekino", "design");
+        assert_eq!(Envelope::parse(&e.render()), Some(e));
+        assert_eq!(Envelope::parse("just a comment"), None);
+        assert_eq!(
+            Envelope::parse("pmcp-mail v1\nfrom: Bad Name\nto: design\n---\nx"),
+            None
+        );
+        assert!(valid_actor("oss-desktop-2") && !valid_actor("-x") && !valid_actor("A"));
+    }
+
+    #[test]
+    fn github_comment_maps_receipts() {
+        let c = serde_json::json!({
+            "id": 7, "created_at": "2026-11-19T20:09:04Z",
+            "body": env("oss-desktop", "design").render(),
+            "reactions": {"eyes": 1, "+1": 0}
+        });
+        let m = stored_from_comment(&c).unwrap();
+        assert!(m.read && !m.acked && m.id == 7);
+    }
+
+    #[derive(Default)]
+    struct Fake {
+        boxes: RefCell<Vec<(String, Stored)>>,
+    }
+
+    impl Transport for Fake {
+        fn send(&self, e: &Envelope) -> Result<u64, String> {
+            let mut b = self.boxes.borrow_mut();
+            let id = b.len() as u64 + 1;
+            let stored = Stored {
+                id,
+                created_at: format!("2026-11-{:02}T00:00:00Z", 10 + id),
+                envelope: e.clone(),
+                read: false,
+                acked: false,
+            };
+            b.push((e.to.clone(), stored));
+            Ok(id)
+        }
+        fn list(&self, actor: &str) -> Result<Vec<Stored>, String> {
+            Ok(self
+                .boxes
+                .borrow()
+                .iter()
+                .filter(|(b, _)| b == actor)
+                .map(|(_, m)| m.clone())
+                .collect())
+        }
+        fn receipt(&self, id: u64, kind: Receipt) -> Result<(), String> {
+            for (_, m) in self
+                .boxes
+                .borrow_mut()
+                .iter_mut()
+                .filter(|(_, m)| m.id == id)
+            {
+                match kind {
+                    Receipt::Read => m.read = true,
+                    Receipt::Ack => m.acked = true,
+                }
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn inbox_hides_acked_and_old_broadcasts() {
+        let t = Fake::default();
+        send(&t, env("kinekino", "design")).unwrap(); // id 1, 11th
+        send(&t, env("design", "all")).unwrap(); // id 2, 12th: own broadcast
+        send(&t, env("arks", "all")).unwrap(); // id 3, 13th
+        send(&t, env("svgif", "design")).unwrap(); // id 4, 14th
+        t.receipt(4, Receipt::Ack).unwrap();
+        let ids = |v: Vec<Stored>| v.into_iter().map(|m| m.id).collect::<Vec<_>>();
+        assert_eq!(
+            ids(inbox(&t, "design", false, "2026-11-01T00:00:00Z").unwrap()),
+            vec![1, 3]
+        );
+        assert_eq!(
+            ids(inbox(&t, "design", false, "2026-11-20T00:00:00Z").unwrap()),
+            vec![1]
+        );
+        assert_eq!(
+            ids(inbox(&t, "design", true, "2026-11-20T00:00:00Z").unwrap()),
+            vec![1, 3, 4]
+        );
+    }
+
+    #[test]
+    fn send_validates_input() {
+        let t = Fake::default();
+        assert!(
+            send(
+                &t,
+                Envelope {
+                    body: " ".into(),
+                    ..env("a", "b")
+                }
+            )
+            .is_err()
+        );
+        assert!(
+            send(
+                &t,
+                Envelope {
+                    subject: "".into(),
+                    ..env("a", "b")
+                }
+            )
+            .is_err()
+        );
+        assert!(send(&t, env("A", "b")).is_err());
+    }
+
+    #[test]
+    fn days_ago_formats_utc() {
+        // 2026-11-19T20:00:00Z = 1795118400
+        assert_eq!(days_ago(1_795_118_400, 7), "2026-11-12T20:00:00Z");
+        assert_eq!(days_ago(0, 0), "1970-01-01T00:00:00Z");
+    }
+}
