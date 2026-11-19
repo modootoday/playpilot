@@ -1,8 +1,8 @@
 apiVersion = "playpilot.io/v1"
 kind = "Device"
 [metadata]
-name = "oss-desktop-2"
-annotations = { remoteControlTitle = "OSS Desktop #2" }
+name = "build-node"
+annotations = { remoteControlTitle = "Build node" }
 [spec]
 capabilities = ["os:linux", "os:windows", "toolchain:msvc", "build:heavy", "gui", "human-present"]
 roles = ["heavy-builder", "windows-validator"]

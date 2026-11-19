@@ -12,7 +12,7 @@ applies everywhere; only the runtime layer differs.
              ▲                ▲                 ▲              ▲
              │ gh             │ gh              │ connector    │ token injected
    ┌─────────┴──────┐ ┌───────┴────────┐ ┌──────┴───────┐ ┌────┴──────────────┐
-   │ OSS Desktop    │ │ OSS Desktop #2 │ │ Claude cloud │ │ CF container      │
+   │ Workstation    │ │ Build node     │ │ Claude cloud │ │ CF container      │
    │ Windows + WSL  │ │ WSL (+Windows) │ │ sessions /   │ │ (optional, paid   │
    │ RC server      │ │ RC server      │ │ scheduled    │ │ mode) claude -p   │
    │ windows/gui    │ │ heavy-build    │ │ tasks        │ │ dispatched by a   │
