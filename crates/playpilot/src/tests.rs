@@ -78,6 +78,15 @@ fn reported_false_refusals_are_allowed() {
 }
 
 #[test]
+fn arks_is_checked_like_git() {
+    assert!(!allowed("arks push origin main"));
+    assert!(!allowed("arks push --force origin claude/x"));
+    assert!(!allowed("arks tag v1.0.0"));
+    assert!(allowed("arks push -u origin claude/x"));
+    assert!(allowed("arks status"));
+}
+
+#[test]
 fn heredocs_fed_to_a_shell_are_checked() {
     assert!(!allowed("bash <<'EOF'\ngit push origin main\nEOF"));
     assert!(!allowed(

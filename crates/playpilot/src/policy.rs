@@ -71,7 +71,8 @@ impl Policy {
         let program = program.rsplit(['/', '\\']).next().unwrap_or(program);
         let program = program.trim_end_matches(".exe");
         match program {
-            "git" => self.check_git(&git_subcommand(&words[1..])),
+            // arks is a git-compatible client; its push and tag verbs carry the same risks.
+            "git" | "arks" => self.check_git(&git_subcommand(&words[1..])),
             "gh" => check_gh(&words[1..]),
             "cargo" if words.get(1).map(String::as_str) == Some("publish") => {
                 Err(refusal("publishing a crate is owner-only"))
