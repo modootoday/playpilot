@@ -1,5 +1,6 @@
 //! The compiled fleet configuration the Worker serves. Git authors it; the
-//! deploy step hands it to the Worker as a binding. The Worker only adds its
+//! deploy step hands it to the Worker as a KV value (namespace `CONFIG`, key
+//! `config.json`) or, without that namespace, as a var. The Worker only adds its
 //! own narrow-only `ops` and an ETag.
 
 use serde_json::Value;
@@ -89,6 +90,25 @@ fn fnv1a(bytes: &[u8]) -> u64 {
     })
 }
 
+/// Where the compiled config text is read from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Source {
+    /// The KV namespace is bound: its value is authoritative, even when absent.
+    Kv(Option<String>),
+    /// No KV namespace: the var or secret.
+    Var(Option<String>),
+}
+
+/// The config text, or why there is none. A bound namespace without the key
+/// is an error rather than a silent fall back to an older var.
+pub fn config_text(source: Source, kv: &str, key: &str, var: &str) -> Result<String, String> {
+    let nonempty = |t: Option<String>| t.filter(|t| !t.trim().is_empty());
+    match source {
+        Source::Kv(t) => nonempty(t).ok_or(format!("{kv} has no `{key}`")),
+        Source::Var(t) => nonempty(t).ok_or(format!("{var} is not set")),
+    }
+}
+
 /// `If-None-Match` handling: `*` or any listed tag (weak or strong) matches.
 pub fn not_modified(if_none_match: Option<&str>, etag: &str) -> bool {
     let Some(header) = if_none_match else {
@@ -145,6 +165,22 @@ mod tests {
         assert!(c.etag(&none).contains(&c.rev));
         assert!(c.serve(&none).get("ops").is_none());
         assert_eq!(c.serve(&some)["ops"]["Lane/build"]["paused"], true);
+    }
+
+    #[test]
+    fn kv_binding_wins_over_the_var() {
+        let pick = |s| config_text(s, "CONFIG", "config.json", "VAR");
+        assert_eq!(pick(Source::Kv(Some("{}".into()))).unwrap(), "{}");
+        assert_eq!(pick(Source::Var(Some("[]".into()))).unwrap(), "[]");
+        assert_eq!(
+            pick(Source::Kv(None)).unwrap_err(),
+            "CONFIG has no `config.json`"
+        );
+        assert_eq!(
+            pick(Source::Kv(Some(" ".into()))).unwrap_err(),
+            "CONFIG has no `config.json`"
+        );
+        assert_eq!(pick(Source::Var(None)).unwrap_err(), "VAR is not set");
     }
 
     #[test]

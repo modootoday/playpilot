@@ -15,8 +15,8 @@ use crate::domain::node::{Heartbeat, NodeCmd, NodeReply};
 use crate::domain::state;
 use crate::domain::time::{duration, rfc3339};
 
-pub fn config(req: &Request, env: &Env) -> Result<Response> {
-    let (compiled, ops) = match (settings::config(env), settings::worker_ops(env)) {
+pub async fn config(req: &Request, env: &Env) -> Result<Response> {
+    let (compiled, ops) = match (settings::config(env).await, settings::worker_ops(env)) {
         (Ok(c), Ok(o)) => (c, o),
         (Err(e), _) | (_, Err(e)) => return http::internal(e),
     };
@@ -62,7 +62,8 @@ pub async fn create_lease(mut req: Request, env: &Env, caller: &Identity) -> Res
         Ok(t) => t,
         Err(e) => return lease_error(&e),
     };
-    let switches = match settings::switches(env) {
+    let compiled = settings::config(env).await.ok();
+    let switches = match settings::switches(env, compiled.as_ref()) {
         Ok(s) => s,
         Err(e) => return http::internal(e),
     };
@@ -131,7 +132,8 @@ pub async fn heartbeat(
             return http::internal(e);
         }
     }
-    let switches = match settings::switches(env) {
+    let compiled = settings::config(env).await.ok();
+    let switches = match settings::switches(env, compiled.as_ref()) {
         Ok(s) => s,
         Err(e) => return http::internal(e),
     };
@@ -139,7 +141,7 @@ pub async fn heartbeat(
         "receivedAt": rfc3339(settings::now()),
         "ops": switches.effective("Device", &caller.claim),
     });
-    if let (Ok(c), Ok(o)) = (settings::config(env), settings::worker_ops(env)) {
+    if let (Some(c), Ok(o)) = (&compiled, settings::worker_ops(env)) {
         ack["configEtag"] = json!(c.etag(&o));
     }
     http::json(200, &ack)
@@ -172,11 +174,12 @@ pub async fn state(env: &Env) -> Result<Response> {
         Ok(other) => return http::internal(format!("unexpected reply {other:?}")),
         Err(e) => return http::internal(e),
     };
-    let switches = match settings::switches(env) {
+    let compiled = settings::config(env).await.ok();
+    let switches = match settings::switches(env, compiled.as_ref()) {
         Ok(s) => s,
         Err(e) => return http::internal(e),
     };
-    let lanes = settings::config(env).map(|c| c.lanes()).unwrap_or_default();
+    let lanes = compiled.as_ref().map(|c| c.lanes()).unwrap_or_default();
     http::json(
         200,
         &state::build(&state::Inputs {

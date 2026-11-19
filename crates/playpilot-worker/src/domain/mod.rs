@@ -1,5 +1,6 @@
 //! Pure Worker logic: no `worker` types, no I/O, unit-tested on the host.
 
+pub mod access;
 pub mod bus;
 pub mod config;
 pub mod event;
