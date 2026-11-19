@@ -170,14 +170,27 @@ idempotency key; a failed or `429` fire is logged and never fails the send.
 
 ## 7. CLI surface
 
-`playpilot validate | plan | render | whoami | claim | release | sync --check | node install | guard | migrate | events tail`
+Implemented: `guard`, `history-check`, `surface-check`, `validate`,
+`render settings | prompt | node`, `sync`, `node install`, `plan`, `whoami`,
+`claim`, `release`, `mail send | inbox | read | ack` and `mcp`. Usage, exit codes and environment
+variables are in the [CLI reference](guides/cli.md).
+
+Planned: `migrate`, `events tail`, and `render` for role files.
 
 - `plan`: who does what (device × lane × project × role), and what is uncovered.
-- `render`: writes `.claude/settings.json` (implemented: `render settings`, `render prompt`, `render node`), role files, systemd units,
-  Task Scheduler XML and scheduled-task prompts from the config.
+- `render`: writes `.claude/settings.json` (`render settings`), systemd units
+  and Task Scheduler XML (`render node`) and scheduled-task prompts
+  (`render prompt`) from the config; role files are planned.
 - `whoami`: on a node, resolves its device id to roles, lanes and projects.
 - `sync --check` (implemented): lists every project-side file `render` would
   produce that differs from the checkout (exit 1); `sync` writes them.
 - `node install` (implemented): puts `render node` output into the OS location
   (systemd user unit, Task Scheduler XML) and prints, never runs, the enable
   commands; `--dry-run` previews, `--force` replaces a file that differs.
+- `migrate` (planned): rewrites resources from one API version to the next.
+- `events tail` (planned): follows fleet CloudEvents.
+
+Releases come from the owner-run `release` workflow
+(`.github/workflows/release.yml`): Linux x86_64 and aarch64 and Windows x86_64
+archives with `SHA256SUMS` and build provenance attestations. crates.io and
+container images are follow-ups.
