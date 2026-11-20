@@ -310,6 +310,11 @@
           "type": "string",
           "pattern": "^(roadmap|bugs|public-surface|lane:[a-z0-9]+(-[a-z0-9]+)*)$"
         },
+        "notes": {
+          "type": "array",
+          "description": "Project-specific standing lines that render prompt appends verbatim.",
+          "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+        },
         "ops": { "$ref": "#/$defs/ops" },
         "extensions": { "$ref": "#/$defs/extensions" }
       }
