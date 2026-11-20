@@ -47,6 +47,9 @@ pub fn prompt_text(s: &SessionSpec) -> String {
             "Follow the repository's AGENTS.md and its automation rules; run the unattended loop once ",
             "for this work: take one item, finish it through a pull request, and report the result.\n",
             "Read your fleet mailbox with `playpilot mail inbox --as {project}` before choosing work.\n",
+            "If the fleet configuration repository is checked out next to this one, run ",
+            "`playpilot sync --check --project {project} --config <that checkout> --repo .`; when it ",
+            "reports stale files, run it without `--check` and open one pull request with the result.\n",
             "Do not ask the user questions; if there is nothing to do, say so in one line and stop.\n"
         ),
         name = s.name,

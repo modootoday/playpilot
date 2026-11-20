@@ -618,6 +618,7 @@ mod render_rules {
         ));
         assert!(text.contains("AGENTS.md"));
         assert!(text.contains("playpilot mail inbox --as k"));
+        assert!(text.contains("playpilot sync --check --project k "));
         assert!(text.contains("Do not ask the user questions"));
         assert!(text.ends_with("stop.\n"));
         assert!(session_spec(&[session("roadmap")], "other").is_err());
