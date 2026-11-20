@@ -80,6 +80,8 @@ pub fn prompt_text(s: &SessionSpec) -> String {
             "If the fleet configuration repository is checked out next to this one, run ",
             "`playpilot sync --check --project {project} --config <that checkout> --repo .`; when it ",
             "reports stale files, run it without `--check` and open one pull request with the result.\n",
+            "In commits, pull requests and issues call it only \"the fleet configuration\": never its ",
+            "repository name, path or commit.\n",
         ),
         name = s.name,
         project = s.project,
