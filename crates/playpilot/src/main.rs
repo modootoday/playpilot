@@ -13,6 +13,7 @@ mod migrate;
 mod plan;
 mod policy;
 mod render;
+mod status;
 mod surface;
 mod sync;
 mod validate;
@@ -31,6 +32,7 @@ fn main() -> ExitCode {
         Some("validate") => validate_dir(std::env::args().nth(2)),
         Some("migrate") => migrate::cli::main(std::env::args().skip(2).collect()),
         Some("render") => render::cli::main(std::env::args().skip(2).collect()),
+        Some("status") => status::main(std::env::args().skip(2).collect()),
         Some("sync") => sync::main(std::env::args().skip(2).collect()),
         Some("node") if std::env::args().nth(2).as_deref() == Some("install") => {
             install::main(std::env::args().skip(3).collect())
@@ -56,6 +58,7 @@ fn main() -> ExitCode {
             eprintln!(
                 "       playpilot render <settings|roles|prompt|node|plugins> ... (playpilot render --help)"
             );
+            eprintln!("       {}", status::USAGE.trim_start_matches("usage: "));
             eprintln!("       {}", sync::USAGE.trim_start_matches("usage: "));
             eprintln!("       {}", install::USAGE.trim_start_matches("usage: "));
             eprintln!(

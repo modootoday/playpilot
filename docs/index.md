@@ -35,5 +35,6 @@ See [Install a node](guides/install.md) for a home device and
 - [Architecture](architecture.md)
 - [CLI reference](guides/cli.md)
 - [Configuration, interfaces and extensions](config-and-extensions.md)
+- [Fleet status](status.md)
 
 What is left to 1.0: [Roadmap](roadmap.md).

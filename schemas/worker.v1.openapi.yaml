@@ -386,6 +386,20 @@ components:
               leased:
                 type: integer
                 minimum: 0
+        projects:
+          description: |
+            Last run per project, by the project's resource name. Optional;
+            the Worker does not publish it yet, and readers show it as unknown.
+          type: array
+          items:
+            type: object
+            required: [name]
+            properties:
+              name:
+                $ref: '#/components/schemas/NodeId'
+              lastRun:
+                type: string
+                format: date-time
     Problem:
       description: RFC 9457 problem details.
       type: object
