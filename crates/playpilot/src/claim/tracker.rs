@@ -15,6 +15,8 @@ pub trait Tracker {
     fn add_label(&self, item: &str, label: &str) -> Result<(), String>;
     /// Removing a label that is not there is not an error.
     fn remove_label(&self, item: &str, label: &str) -> Result<(), String>;
+    /// Open issues and pull requests in `repo` (`owner/repo`) with `label`.
+    fn labelled(&self, repo: &str, label: &str) -> Result<Vec<String>, String>;
 }
 
 /// Splits `owner/repo#12` into (`owner/repo`, 12).

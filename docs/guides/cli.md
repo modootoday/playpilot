@@ -28,12 +28,13 @@ Every subcommand uses the same small set:
 | `PLAYPILOT_DEVICE` | `whoami` | device name when `--device` is not given |
 | `PLAYPILOT_ACTOR` | `mail`, `mcp`, `claim`, `release` | this session's actor (mailbox name); the claim id when `PLAYPILOT_CLAIM_ID` is unset |
 | `PLAYPILOT_CLAIM_ID` | `claim`, `release`, `mcp` | the id written on claims; use one that names no device |
-| `PLAYPILOT_MAIL_URL` | `mail`, `mcp` | the Worker's `/mcp` URL; when set, mail goes through the Worker |
-| `PLAYPILOT_MCP_TOKEN` | `mail`, `mcp` | bearer token for the Worker's `/mcp` |
+| `PLAYPILOT_MAIL_URL` | `mail`, `mcp`, `claim`, `release` | the Worker's `/mcp` URL; when set, mail goes through the Worker; the lease endpoint for `--backend worker` |
+| `PLAYPILOT_MCP_TOKEN` | `mail`, `mcp`, `claim`, `release` | bearer token for the Worker's `/mcp` |
+| `PLAYPILOT_CLAIM_BACKEND` | `claim`, `release` | `github` (default) or `worker`, when `--backend` is not given |
 | `PLAYPILOT_MAILBOX_REPO` | `mail`, `mcp` | `owner/name` of the mailbox repository (GitHub transport) |
 
 `claim`, `release` and the GitHub mail transport call GitHub through the `gh`
-CLI and its login. The Worker mail transport uses `curl`.
+CLI and its login. The Worker mail transport and Worker leases use `curl`.
 
 ## guard
 
@@ -173,20 +174,48 @@ configuration does not load or the device is unknown or unset.
 Claims a lane item (an issue or pull request) so no other node works on it.
 
 ```
-playpilot claim <owner/repo#n> [--as <id>] [--stale-hours <n>]
+playpilot claim <owner/repo#n> [--as <id>] [--stale-hours <n>] [--backend github|worker] [--lane <name>]
 ```
 
-The earliest claim wins. A claim with no activity for `--stale-hours`
-(default 6) is taken over. Exit `0` when claimed or already yours, `1` when
-another node holds it or claimed first.
+With the `github` backend (the default) the earliest claim comment wins, and
+a claim with no activity for `--stale-hours` (default 6) is taken over.
+
+With the `worker` backend the Worker's lease decides. `claim` first takes a
+Durable Object lease through the Worker's `task_claim` tool (lane `--lane`,
+default `default`; TTL `--stale-hours`, 1 to 24 hours), then mirrors it on the
+item: a comment `claim: <id> <time>` with a second line
+`lease: <lease id> until <time>`, and the `claimed` label.
+
+- An open lease held by someone else refuses the claim, and the item is not touched.
+- Claiming again as the holder renews the lease and posts the new `lease:` line.
+- A mirrored claim whose lease is gone (the Worker granted a new one) is ended
+  with `release: expired lease`. A claim made without the Worker keeps the stale rule.
+- When a claim made without the Worker is still fresh, or another claim lands
+  first, the lease is given back.
+- The claim id comes from the Worker credential. If `--as` names another id,
+  the claim is refused and the lease is given back.
+- If GitHub fails after the lease is taken, the lease stays and runs out by its TTL.
+
+Exit `0` when claimed or already yours, `1` when another node holds it,
+claimed first or the Worker refused.
 
 ## release
 
 Releases an item this node holds, with an optional result note.
 
 ```
-playpilot release <owner/repo#n> [--as <id>] [--note <text>]
+playpilot release <owner/repo#n> [--as <id>] [--note <text>] [--backend github|worker]
+playpilot release --expired <owner/repo#n | owner/repo>
 ```
+
+With `--backend worker` the lease is released first. A lease that has already
+expired is not an error. Then the claim comment and label are released.
+
+`--expired` ends claims whose mirrored lease has run out (the latest
+`lease: … until <time>` line is in the past). It comments `release: expired
+lease` and removes `claimed`. It runs on one item, or on every open `claimed`
+item of a repository. Any node may run it. Claims without a `lease:` line are
+left alone.
 
 Exit `0` when released, `1` on failure.
 
