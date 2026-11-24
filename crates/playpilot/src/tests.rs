@@ -1,4 +1,4 @@
-use super::decide;
+use super::{decide, decide_with_plugins};
 use crate::policy::Policy;
 
 fn bash(cmd: &str) -> String {
@@ -1622,4 +1622,18 @@ mod migrate_rules {
         assert!(parse(args(&["--check", "--check", "a"])).is_none());
         assert!(parse(args(&["--help"])).is_none());
     }
+}
+
+#[test]
+fn policy_plugins_run_only_after_the_core_allows() {
+    let p = Policy::default();
+    let value = format!("{}=missing.wasm", "0".repeat(64));
+    let plugins = Some(std::ffi::OsStr::new(&value));
+    let core = decide_with_plugins(&p, &bash("git push --force origin main"), plugins).unwrap_err();
+    assert!(!core.0.contains("policy plugins"), "{}", core.0);
+    let gate = decide_with_plugins(&p, &bash("git status"), plugins).unwrap_err();
+    assert!(gate.0.contains("policy plugins fail closed"), "{}", gate.0);
+    let edit = serde_json::json!({"tool_name": "Edit", "tool_input": {}}).to_string();
+    assert!(decide_with_plugins(&p, &edit, plugins).is_ok());
+    assert!(decide_with_plugins(&p, &bash("git status"), None).is_ok());
 }

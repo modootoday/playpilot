@@ -40,7 +40,7 @@ owner), `optional`.
 | R10 | A0 | — | **Plugin index** (`plugins.` host): generated from `Plugin` resources, pinned by URL and SHA-256 | Index validates against the schema. **done** (#41): `render plugins` |
 | R11 | A2 | — | **First release v0.1.0**: owner creates the `release` environment, applies `v-tags`, runs the workflow | Release with three archives, SHA256SUMS, attestations |
 | R12 | A0 | R11 | **Pin by version**: fleet `playpilot.lock` holds a version; `--version` prints version and rev; the setup script and hooks install the release asset instead of building | Fresh container installs in under 30 s |
-| R13 | A1 | — | **Plugin host**: WASM component host (WIT `playpilot:fleet@1.0.0`) for `policy-check` (refuse only) and `event-sink`; fail-closed for policy, log-and-continue for sinks | Example plugins of both kinds pass; a crashing policy plugin blocks |
+| R13 | A1 | — | **Plugin host**: WASM component host (WIT `playpilot:fleet@1.0.0`) for `policy-check` (refuse only) and `event-sink`; fail-closed for policy, log-and-continue for sinks | Example plugins of both kinds pass; a crashing policy plugin blocks. **done** (#44): `crates/playpilot-plugins`, `guard` with `PLAYPILOT_POLICY_PLUGINS` |
 | R14 | A1 | R12 | **Windows node**: Task Scheduler task from `node install` runs the Remote Control server; the guard hook runs on Windows | `needs-windows-run` item with the measured run |
 | R15 | A2 | R2–R8 | **Production**: owner deploys the same build to the production hosts and Access | Probes on production match stage |
 

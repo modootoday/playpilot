@@ -85,6 +85,33 @@ plugins host (`plugins.`) serves this file as is; hosts and nodes resolve a
 plugin through it and verify the digest before loading it. `--check` in CI
 keeps the published index in step with the configuration.
 
+Plugin host (`crates/playpilot-plugins`): runs `wasm-component` plugins
+that export `policy-check` or `event-sink` (the other interfaces are not
+hosted yet and refuse to load). The host loads an index entry from the local
+cache `<cache>/<sha256>.wasm` (fetching is a separate step), checks the
+SHA-256 against the pin before compiling, and refuses a mismatch, a missing
+file or a file over 16 MiB. The sandbox links nothing: no WASI filesystem,
+clock, network or host calls, so a component that imports anything fails to
+instantiate. Every call gets a fresh instance, a fixed fuel budget (50 million
+units) and a 16 MiB memory cap; running out of either traps. Grants are not
+enforced yet, so an entry that grants network hosts or secrets is refused for
+both interfaces.
+
+| Interface | Plugin answers | Plugin fails, traps or hits a limit |
+| --- | --- | --- |
+| `policy-check` | `allow` lets the command through; `refuse(reason)` blocks it with the reason | blocks the command (fail closed) |
+| `event-sink` | `ok` | logged on stderr, the caller continues and the other sinks still get the event (fail open) |
+
+`playpilot guard` consults policy plugins only after the core policy allowed
+a `Bash` or `PowerShell` command, so a plugin can add a refusal but never
+allow what the core refused. The plugins are listed in
+`PLAYPILOT_POLICY_PLUGINS` as `sha256=path` items separated by `;`
+([CLI reference](guides/cli.md#environment-variables)). The host is behind the
+`plugins` cargo feature of `playpilot` (off by default, it adds wasmtime to
+the build): `cargo build --release -p playpilot --features plugins`. A build
+without the feature refuses every shell command while the variable is set,
+rather than ignore it.
+
 Claude Code plugins (skills, agents, hooks for the CLI) stay a separate,
 local-only convenience; cloud sessions do not load them, so nothing in the
 fleet depends on them.

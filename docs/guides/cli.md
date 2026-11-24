@@ -25,6 +25,7 @@ Every subcommand uses the same small set:
 | Variable | Read by | Meaning |
 | --- | --- | --- |
 | `PLAYPILOT_PROTECTED_BRANCHES` | `guard` | comma-separated branches nobody pushes to; default `main,master` |
+| `PLAYPILOT_POLICY_PLUGINS` | `guard` | policy plugins as `sha256=path` items separated by `;`; checked after the core policy allows a command; unset or blank means none. Needs a build with `--features plugins`; any problem refuses ([plugins](../config-and-extensions.md#4-plugins)) |
 | `PLAYPILOT_DEVICE` | `whoami` | device name when `--device` is not given |
 | `PLAYPILOT_ACTOR` | `mail`, `mcp`, `claim`, `release` | this session's actor (mailbox name); the claim id when `PLAYPILOT_CLAIM_ID` is unset |
 | `PLAYPILOT_CLAIM_ID` | `claim`, `release`, `mcp` | the id written on claims; use one that names no device |
@@ -50,6 +51,17 @@ playpilot guard < event.json
 
 Exit `0` allows the tool call; exit `2` blocks it and the reason on stderr is
 shown to Claude. Input that is not JSON is blocked.
+
+When `PLAYPILOT_POLICY_PLUGINS` is set, a command the core policy allowed
+also goes to each listed `policy-check` plugin in order. A plugin's
+`refuse` blocks it; so does a SHA-256 mismatch, a missing file, a trap, an
+exhausted fuel or memory limit, a malformed list, or a binary built without
+the `plugins` feature.
+
+```
+cargo build --release -p playpilot --features plugins
+PLAYPILOT_POLICY_PLUGINS="<sha256>=<cache>/<sha256>.wasm" playpilot guard < event.json
+```
 
 ## history-check
 
