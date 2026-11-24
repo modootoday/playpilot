@@ -16,3 +16,8 @@ GitHub is the only shared state between devices and cloud sessions. Use
    `needs-owner` if a decision is needed).
 5. A claim with no comment for 6 hours (`Fleet.spec.claims.staleAfter`) is
    stale; any node may comment `release: stale claim` and reclaim.
+6. Worker-backed claims (`--backend worker`): the Worker lease decides, and the
+   claim comment's second line `lease: <id> until <time>` mirrors it. A mirrored
+   claim whose lease has run out ends with `release: expired lease`
+   (`playpilot release --expired`); rule 5 does not apply to it. A heartbeat that
+   renews the lease posts the new `lease:` line.
