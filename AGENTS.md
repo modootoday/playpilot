@@ -29,7 +29,7 @@ See `.agents/rules/devices.md`. Work is routed by labels; a node claims an item
 before starting (`.agents/rules/claims.md`).
 
 ## Verification
-`cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test --locked`.
+`cargo fmt --check`, `cargo clippy --workspace --all-features --all-targets -- -D warnings`, `cargo test --locked --workspace --all-features` (as CI runs them; the plugin host is outside the default members).
 
 ## Project profile
 | Value | Setting |
