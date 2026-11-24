@@ -35,7 +35,7 @@ owner), `optional`.
 | R5 | A0 | R4 | **Outbound events**: `Webhook` resources get Standard Webhooks signed deliveries with retries and de-duplication | Tests with a fixed key; a local receiver sees signed, retried, de-duplicated events |
 | R6 | A0 | R4 | **`events tail`**: follows the stored events through the Worker | Lists events in order; filter by type |
 | R7 | A0 | — | **`migrate`** (done, #40): framework that rewrites resources between API versions; v1 → v1 is a no-op that only validates | Tests; `migrate --check` on the fleet is clean |
-| R8 | A0 | — | **Public status page**: `/v1/state` public subset rendered on the docs site (no device names) | Page shows lanes, open claims count, last run per project |
+| R8 | A0 | — | **Public status page** (done, #43): `/v1/state` public subset rendered on the docs site (no device names) | Page shows lanes, open claims count, last run per project. [status page](status.md), `playpilot status` |
 | R9 | A0 | R11 | **Install redirects** (`get.` host): `install.sh`, `install.ps1`, `/v/<version>/<target>` → release asset + SHA-256 | Installs a released binary on Linux and Windows |
 | R10 | A0 | — | **Plugin index** (`plugins.` host): generated from `Plugin` resources, pinned by URL and SHA-256 | Index validates against the schema. **done** (#41): `render plugins` |
 | R11 | A2 | — | **First release v0.1.0**: owner creates the `release` environment, applies `v-tags`, runs the workflow | Release with three archives, SHA256SUMS, attestations |

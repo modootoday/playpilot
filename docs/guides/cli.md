@@ -174,6 +174,22 @@ outside `playpilot:fleet/<interface>@1.x.y`, an unknown kind or grant, or a
 secret given as anything but a name or `{ secretRef = "NAME" }`. `--check`
 needs `--out` and exits `1` when the file is stale.
 
+## status
+
+Writes the snapshot the [status page](../status.md) reads: the Worker's public
+`/v1/state`, validated and rebuilt from the fields of the `PublicState` subset
+in `schemas/worker.v1.openapi.yaml`.
+
+```
+playpilot status --from <url|file> [--out docs/status.json]
+```
+
+`--from` is an `http(s)://` URL, fetched with `curl` and no credential, or a
+local file. A field outside the public subset, a node id that is not an opaque
+id, or a malformed count or date is refused, never dropped, so nothing private
+reaches the page. Without `--out` the snapshot goes to stdout. Exit `0` when
+written, `1` when the state cannot be read or is refused, `64` on usage errors.
+
 ## sync
 
 ```

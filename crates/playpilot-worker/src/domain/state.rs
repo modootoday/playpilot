@@ -105,4 +105,38 @@ mod tests {
         assert_eq!(lanes[1]["paused"], true);
         assert!(!v.to_string().contains("rev"));
     }
+
+    /// Node ids are the Access claim ids; device names, revs, runtimes and
+    /// node lanes never reach the public subset.
+    #[test]
+    fn only_public_fields() {
+        let mut laptop = rec(1_000, &["build"]);
+        laptop.runtimes = vec![super::super::node::Runtime {
+            kind: "claude-code".into(),
+            capacity: Some(2),
+            busy: Some(1),
+        }];
+        let nodes = BTreeMap::from([("node-a".to_string(), laptop)]);
+        let v = build(&Inputs {
+            nodes: &nodes,
+            leased: &BTreeMap::new(),
+            config_lanes: &[],
+            switches: &Switches {
+                file: OpsTable::default(),
+                worker: OpsTable::default(),
+            },
+            now: 1_100,
+            offline_after: 600,
+        });
+        let keys =
+            |v: &Value| -> BTreeSet<String> { v.as_object().unwrap().keys().cloned().collect() };
+        let set = |k: &[&str]| -> BTreeSet<String> { k.iter().map(|s| s.to_string()).collect() };
+        assert_eq!(keys(&v), set(&["generatedAt", "lanes", "nodes"]));
+        assert_eq!(keys(&v["nodes"][0]), set(&["id", "lastSeen", "status"]));
+        assert_eq!(
+            keys(&v["lanes"][0]),
+            set(&["leased", "name", "paused", "queued"])
+        );
+        assert!(!v.to_string().contains("claude-code"));
+    }
 }
