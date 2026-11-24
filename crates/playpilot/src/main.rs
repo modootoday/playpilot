@@ -11,6 +11,7 @@ mod mail;
 mod mcp;
 mod migrate;
 mod plan;
+mod plugin_gate;
 mod policy;
 mod render;
 mod status;
@@ -261,7 +262,8 @@ fn guard() -> ExitCode {
             .as_deref(),
     );
     policy.local_tags = local_tags(&input);
-    match decide(&policy, &input) {
+    let plugins = std::env::var_os(plugin_gate::ENV);
+    match decide_with_plugins(&policy, &input, plugins.as_deref()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(policy::Refusal(msg)) => {
             eprintln!("{msg}");
@@ -289,8 +291,20 @@ fn local_tags(input: &str) -> Vec<String> {
     }
 }
 
-/// Extracts the shell command from a PreToolUse event and checks it.
+/// [`decide_with_plugins`] without policy plugins.
+#[cfg(test)]
 fn decide(policy: &policy::Policy, input: &str) -> Result<(), policy::Refusal> {
+    decide_with_plugins(policy, input, None)
+}
+
+/// Extracts the shell command from a PreToolUse event and checks it: the
+/// core policy first; policy plugins (`PLAYPILOT_POLICY_PLUGINS`) only
+/// see commands the core allowed, so they can refuse but never allow.
+fn decide_with_plugins(
+    policy: &policy::Policy,
+    input: &str,
+    plugins: Option<&std::ffi::OsStr>,
+) -> Result<(), policy::Refusal> {
     let event: serde_json::Value = serde_json::from_str(input)
         .map_err(|_| policy::Refusal("playpilot guard: hook input is not JSON".into()))?;
     let tool = event
@@ -304,7 +318,8 @@ fn decide(policy: &policy::Policy, input: &str) -> Result<(), policy::Refusal> {
         .pointer("/tool_input/command")
         .and_then(|v| v.as_str())
         .unwrap_or_default();
-    policy.check_command_line(command)
+    policy.check_command_line(command)?;
+    plugin_gate::check(plugins, tool, command)
 }
 
 #[cfg(test)]

@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["crates/playpilot", "crates/playpilot-worker"]
+members = ["crates/playpilot", "crates/playpilot-plugins", "crates/playpilot-worker"]
+# The plugin host (wasmtime) builds only when asked for (-p, --workspace or the
+# playpilot `plugins` feature), so plain release builds stay small and quick.
+default-members = ["crates/playpilot", "crates/playpilot-worker"]
 
 [workspace.package]
 edition = "2024"

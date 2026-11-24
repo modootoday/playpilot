@@ -10,3 +10,9 @@ publish.workspace = true
 serde_json = { version = "1", features = ["preserve_order"] }
 shlex = "2"
 toml = "1"
+playpilot-plugins = { path = "../playpilot-plugins", optional = true }
+
+[features]
+# The WASM plugin host for `guard` (PLAYPILOT_POLICY_PLUGINS). Off by default
+# to keep the binary and its build small; without it a set variable refuses.
+plugins = ["dep:playpilot-plugins"]
