@@ -54,7 +54,7 @@ fn main() -> ExitCode {
             );
             eprintln!("       {PLAN_USAGE}");
             eprintln!(
-                "       playpilot render <settings|prompt|node> ... (playpilot render --help)"
+                "       playpilot render <settings|roles|prompt|node|plugins> ... (playpilot render --help)"
             );
             eprintln!("       {}", sync::USAGE.trim_start_matches("usage: "));
             eprintln!("       {}", install::USAGE.trim_start_matches("usage: "));

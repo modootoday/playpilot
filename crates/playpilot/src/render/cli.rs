@@ -1,4 +1,4 @@
-//! Presentation: `playpilot render settings | roles | prompt | node`.
+//! Presentation: `playpilot render settings | roles | prompt | node | plugins`.
 //!
 //! `--config` is the fleet configuration repository (holds `fleet/` and
 //! `playpilot.lock`) and defaults to the current directory.
@@ -8,13 +8,14 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use super::output::{self, Action, Mode, Output};
-use super::{node, project, prompt};
+use super::{node, plugins, project, prompt};
 
 pub const USAGE: &str = "\
 usage: playpilot render settings --project <name> [--config <dir>] [--repo <dir>] [--check]
        playpilot render roles    --project <name> [--config <dir>] [--repo <dir>] [--check]
        playpilot render prompt   --session <name> [--config <dir>]
-       playpilot render node     --device <name> [--workspace <dir>] [--config <dir>] [--out <dir> [--check]]";
+       playpilot render node     --device <name> [--workspace <dir>] [--config <dir>] [--out <dir> [--check]]
+       playpilot render plugins  [--config <dir>] [--out <file> [--check]]";
 
 /// Value options each verb accepts; `--check` is the only flag.
 fn options(verb: &str) -> Option<&'static [&'static str]> {
@@ -22,6 +23,7 @@ fn options(verb: &str) -> Option<&'static [&'static str]> {
         "settings" | "roles" => Some(&["--project", "--config", "--repo"]),
         "prompt" => Some(&["--session", "--config"]),
         "node" => Some(&["--device", "--workspace", "--config", "--out"]),
+        "plugins" => Some(&["--config", "--out"]),
         _ => None,
     }
 }
@@ -72,6 +74,7 @@ pub fn main(args: Vec<String>) -> ExitCode {
         "settings" => settings(&a),
         "roles" => roles(&a),
         "prompt" => prompt_cmd(&a),
+        "plugins" => plugins_cmd(&a),
         _ => node_cmd(&a),
     };
     match result {
@@ -156,6 +159,26 @@ fn node_cmd(a: &Args) -> Result<bool, Usage> {
             ok &= sync_file(&out, a.check, "render node")?;
         }
         Ok(ok)
+    })())
+}
+
+/// `render plugins`: prints, writes or checks the plugin index.
+fn plugins_cmd(a: &Args) -> Result<bool, Usage> {
+    let out = a.get("--out").map(Path::new);
+    if a.check && out.is_none() {
+        return Err(Usage);
+    }
+    report((|| {
+        let text = plugins::index_text(&super::fleet(a.config())?)?;
+        let Some(path) = out else {
+            print!("{text}");
+            return Ok(true);
+        };
+        let out = Output {
+            path: path.to_path_buf(),
+            text,
+        };
+        sync_file(&out, a.check, "render plugins")
     })())
 }
 

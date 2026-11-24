@@ -130,6 +130,7 @@ current directory, holding `fleet/` and `playpilot.lock`).
 playpilot render settings --project <name> [--config <dir>] [--repo <dir>] [--check]
 playpilot render prompt   --session <name> [--config <dir>]
 playpilot render node     --device <name> [--workspace <dir>] [--config <dir>] [--out <dir> [--check]]
+playpilot render plugins  [--config <dir>] [--out <file> [--check]]
 ```
 
 - `settings`: writes the guard hook into `<repo>/.claude/settings.json`,
@@ -151,6 +152,27 @@ playpilot render roles --project <name> [--config <fleet repo>] [--repo <project
 Writes `.claude/agents/playpilot-<agent>.md` for each plugin agent the project's
 roles name (agent `playpilot-<agent>`), from definitions built into the CLI,
 because cloud sessions do not load plugins. `sync` covers these files.
+
+## render plugins
+
+```
+playpilot render plugins [--config <fleet repo>] [--out <file> [--check]]
+```
+
+Builds the plugin index (`index.json`, schema
+`schemas/plugin-index.v1.schema.json`) from the fleet's `Plugin` resources and
+prints it, or with `--out` writes it. Each entry has the plugin's `id`
+(`metadata.name`), `kind` (`wasm-component` or `process`), `interface`
+(`policy-check`, `event-sink`, `lane-source` or `runtime`), the full `wit`
+reference, its `source` pin (https `url`, `sha256`) and its `grants`
+(network hosts, secret names). Entries are sorted by id and grants by value,
+so the same configuration always gives the same bytes.
+
+The whole index is refused, listing every problem with its file, when a plugin
+has no https URL, a digest that is not 64 lower-case hex digits, an interface
+outside `playpilot:fleet/<interface>@1.x.y`, an unknown kind or grant, or a
+secret given as anything but a name or `{ secretRef = "NAME" }`. `--check`
+needs `--out` and exits `1` when the file is stale.
 
 ## sync
 

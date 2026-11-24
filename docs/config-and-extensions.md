@@ -73,6 +73,18 @@ Invariants:
    widen permissions, skip the core guard, or read secret values they were not granted.
 3. A failing plugin fails closed for `policy-check`, open (logged) for `event-sink`.
 
+Plugin index: `playpilot render plugins --config <fleet repo> --out index.json`
+builds `index.json` (schema `schemas/plugin-index.v1.schema.json`) from the
+`Plugin` resources: per plugin its id (`metadata.name`), kind, interface, WIT
+reference, source URL and SHA-256 pin, and its grants (network hosts and
+secret names only), sorted by id with a trailing newline, so the same
+configuration always gives the same bytes. A plugin without an https URL or a
+64-hex SHA-256, with an unknown interface, kind or grant, or with anything
+but a secret name or `secretRef` in its secrets refuses the whole index. The
+plugins host (`plugins.`) serves this file as is; hosts and nodes resolve a
+plugin through it and verify the digest before loading it. `--check` in CI
+keeps the published index in step with the configuration.
+
 Claude Code plugins (skills, agents, hooks for the CLI) stay a separate,
 local-only convenience; cloud sessions do not load them, so nothing in the
 fleet depends on them.
@@ -171,7 +183,7 @@ idempotency key; a failed or `429` fire is logged and never fails the send.
 ## 7. CLI surface
 
 Implemented: `guard`, `history-check`, `surface-check`, `validate`, `migrate`,
-`render settings | roles | prompt | node`, `sync`, `node install`, `plan`, `whoami`,
+`render settings | roles | prompt | node | plugins`, `sync`, `node install`, `plan`, `whoami`,
 `claim`, `release`, `mail send | inbox | read | ack` and `mcp`. Usage, exit codes and environment
 variables are in the [CLI reference](guides/cli.md).
 
@@ -180,7 +192,8 @@ Planned: `events tail`.
 - `plan`: who does what (device × lane × project × role), and what is uncovered.
 - `render`: writes `.claude/settings.json`, role files, systemd units,
   Task Scheduler XML and scheduled-task prompts from the config (implemented:
-  `render settings`, `render roles`, `render prompt`, `render node`).
+  `render settings`, `render roles`, `render prompt`, `render node`), and the
+  plugin index (`render plugins`, §4).
   `render roles` writes `.claude/agents/playpilot-<name>.md` for each plugin
   agent the project's roles name, from the definitions built into the CLI,
   because cloud sessions do not load plugins.

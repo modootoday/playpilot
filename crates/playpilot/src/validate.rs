@@ -171,7 +171,7 @@ fn uncovered_lanes(resources: &[Resource]) -> Vec<String> {
 }
 
 /// Secret-like keys must hold a `{ secretRef = "NAME" }`, never a value.
-fn find_literal_secrets(file: &str, t: &Table, path: &str, out: &mut Vec<String>) {
+pub(crate) fn find_literal_secrets(file: &str, t: &Table, path: &str, out: &mut Vec<String>) {
     for (k, v) in t {
         let here = format!("{path}.{k}");
         let lower = k.to_ascii_lowercase();
