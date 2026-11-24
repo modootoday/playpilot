@@ -50,4 +50,24 @@ impl Tracker for GitHubTracker {
             Err(e) => Err(e),
         }
     }
+
+    fn labelled(&self, repo: &str, label: &str) -> Result<Vec<String>, String> {
+        parse_item(&format!("{repo}#1"))?;
+        let mut out = Vec::new();
+        for page in 1.. {
+            let path =
+                format!("repos/{repo}/issues?labels={label}&state=open&per_page=100&page={page}");
+            let batch = crate::gh::api(&[&path], None)?;
+            let items = batch.as_array().cloned().unwrap_or_default();
+            out.extend(
+                items
+                    .iter()
+                    .filter_map(|i| Some(format!("{repo}#{}", i.get("number")?.as_u64()?))),
+            );
+            if items.len() < 100 {
+                break;
+            }
+        }
+        Ok(out)
+    }
 }

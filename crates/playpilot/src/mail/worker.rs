@@ -161,7 +161,7 @@ pub fn tool_outcome(status: u16, text: &str) -> Result<Value, String> {
     Ok(result)
 }
 
-fn text_of(result: &Value) -> String {
+pub fn text_of(result: &Value) -> String {
     result
         .pointer("/content/0/text")
         .and_then(Value::as_str)

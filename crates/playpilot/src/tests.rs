@@ -886,6 +886,9 @@ mod claim_rules {
             self.labels.borrow_mut().retain(|x| x != l);
             Ok(())
         }
+        fn labelled(&self, _: &str, _: &str) -> Result<Vec<String>, String> {
+            Ok(Vec::new())
+        }
     }
 
     const ITEM: &str = "modootoday/kinekino#60";
