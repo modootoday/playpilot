@@ -199,9 +199,7 @@ fn find_literal_secrets(file: &str, t: &Table, path: &str, out: &mut Vec<String>
 
 /// Reads every `*.toml` under `dir` (recursively), skipping lock files.
 pub fn read_dir(dir: &Path) -> Result<Vec<Resource>, Vec<String>> {
-    let mut files = Vec::new();
-    collect(dir, &mut files).map_err(|e| vec![format!("{}: {e}", dir.display())])?;
-    files.sort();
+    let files = toml_files(dir).map_err(|e| vec![format!("{}: {e}", dir.display())])?;
     let mut resources = Vec::new();
     let mut errors = Vec::new();
     for f in files {
@@ -219,6 +217,14 @@ pub fn read_dir(dir: &Path) -> Result<Vec<Resource>, Vec<String>> {
     } else {
         Err(errors)
     }
+}
+
+/// Every `*.toml` under `dir` (recursively), sorted.
+pub fn toml_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    collect(dir, &mut files)?;
+    files.sort();
+    Ok(files)
 }
 
 fn collect(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {

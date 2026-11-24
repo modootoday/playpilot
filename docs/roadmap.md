@@ -34,7 +34,7 @@ owner), `optional`.
 | R4 | A1 | — | **Inbound webhooks** on the hooks host: verify the GitHub signature (`X-Hub-Signature-256`), turn the delivery into a CloudEvent, store it, never execute payload text | Signature tests; a replayed or unsigned delivery is refused; a real GitHub ping is stored on stage |
 | R5 | A0 | R4 | **Outbound events**: `Webhook` resources get Standard Webhooks signed deliveries with retries and de-duplication | Tests with a fixed key; a local receiver sees signed, retried, de-duplicated events |
 | R6 | A0 | R4 | **`events tail`**: follows the stored events through the Worker | Lists events in order; filter by type |
-| R7 | A0 | — | **`migrate`**: framework that rewrites resources between API versions; v1 → v1 is a no-op that only validates | Tests; `migrate --check` on the fleet is clean |
+| R7 | A0 | — | **`migrate`** (done, #40): framework that rewrites resources between API versions; v1 → v1 is a no-op that only validates | Tests; `migrate --check` on the fleet is clean |
 | R8 | A0 | — | **Public status page**: `/v1/state` public subset rendered on the docs site (no device names) | Page shows lanes, open claims count, last run per project |
 | R9 | A0 | R11 | **Install redirects** (`get.` host): `install.sh`, `install.ps1`, `/v/<version>/<target>` → release asset + SHA-256 | Installs a released binary on Linux and Windows |
 | R10 | A0 | — | **Plugin index** (`plugins.` host): generated from `Plugin` resources, pinned by URL and SHA-256 | Index validates against the schema |

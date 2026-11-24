@@ -170,12 +170,12 @@ idempotency key; a failed or `429` fire is logged and never fails the send.
 
 ## 7. CLI surface
 
-Implemented: `guard`, `history-check`, `surface-check`, `validate`,
+Implemented: `guard`, `history-check`, `surface-check`, `validate`, `migrate`,
 `render settings | roles | prompt | node`, `sync`, `node install`, `plan`, `whoami`,
 `claim`, `release`, `mail send | inbox | read | ack` and `mcp`. Usage, exit codes and environment
 variables are in the [CLI reference](guides/cli.md).
 
-Planned: `migrate` and `events tail`.
+Planned: `events tail`.
 
 - `plan`: who does what (device × lane × project × role), and what is uncovered.
 - `render`: writes `.claude/settings.json`, role files, systemd units,
@@ -191,7 +191,11 @@ Planned: `migrate` and `events tail`.
 - `node install` (implemented): puts `render node` output into the OS location
   (systemd user unit, Task Scheduler XML) and prints, never runs, the enable
   commands; `--dry-run` previews, `--force` replaces a file that differs.
-- `migrate` (planned): rewrites resources from one API version to the next.
+- `migrate` (implemented): rewrites resources from their API version to the
+  newest (or `--to`) through a registry of one-function steps; with only
+  `playpilot.io/v1` today it validates and changes nothing. `--check` lists
+  files that would change (exit 1); a rewrite that would drop TOML comments
+  needs `--force`.
 - `events tail` (planned): follows fleet CloudEvents.
 
 Releases come from the owner-run `release` workflow
