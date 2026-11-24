@@ -7,19 +7,29 @@
   "autoMode": {
     "environment": [
       "$defaults",
-      "Organization: personal open-source maintenance fleet. Primary use: software development on public repositories",
-      "Source control: github.com/modootoday and all repos under it. Repository visibility: public",
+      "Organization: personal open-source maintenance fleet run by playpilot. Primary use: software development on public repositories",
+      "Source control: github.com/modootoday and all repos under it; every repository there is the owner's own. Repository visibility: public, except the fleet configuration",
       "Host containment: a dedicated fleet node (WSL distribution, Windows user account, or Cloudflare container) used only for this fleet; GitHub access is the node's own gh login",
-      "Secrets management: secret values are entered only by the owner in GitHub or the environment's secure form; agents never read, print, or set them"
+      "Governance: playpilot .agents/rules/governance.md defines autonomy levels A0 (auto), A1 (needs-human, measured, then auto-merge) and A2 (owner only)",
+      "Secrets management: secret values are entered only by the owner in GitHub, Cloudflare or the environment's secure form; agents never read, print, or set them"
+    ],
+    "allow": [
+      "$defaults",
+      "Turning on auto-merge (gh pr merge --auto or the PR auto-merge API) on modootoday pull requests: rulesets require status checks; the owner chose auto-merge (governance A0/A1)",
+      "Pushing provider-prefixed topic branches (claude/, codex/, cursor/) and opening, labelling, commenting on or closing superseded pull requests and issues in modootoday repositories",
+      "Rewriting the agent's own unmerged topic branch with --force-with-lease=<branch>:<sha> (commit-history H4)",
+      "Running playpilot claim, release, mail, render, sync, plan, whoami, validate, history-check and surface-check",
+      "Installing the CLI pinned in the fleet configuration with cargo install --force --locked --git https://github.com/modootoday/playpilot --rev <rev>"
     ],
     "soft_deny": [
       "$defaults",
-      "Changing .github/workflows, .github/rulesets, .github/settings or a repository's shared automation rules needs the needs-human label on the pull request"
+      "Changing .github/workflows, .github/rulesets, .github/settings, guard or policy code, or a repository's shared automation rules needs the needs-human label on the pull request and a recorded measurement (governance A1)"
     ],
     "hard_deny": [
       "$defaults",
-      "Never push to a protected branch, force-push, rewrite pushed history, create tags or releases, approve or directly merge a pull request, or change rulesets or secrets",
-      "Never put personal email addresses, private host values, local paths or private terms into commits, code, issues or pull requests of public repositories"
+      "Never push to a protected branch, force-push other than a lease on the agent's own branch, rewrite pushed history, create tags or releases, approve or directly merge a pull request, or change rulesets, required checks or secrets",
+      "Never deploy to production, publish packages, buy or enable paid resources, or delete repositories or data (governance A2)",
+      "Never put private repository names, stage hosts, account or resource ids, device names, personal email addresses, local paths or private terms into commits, code, issues or pull requests of public repositories"
     ]
   }
 }

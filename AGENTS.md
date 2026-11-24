@@ -18,6 +18,12 @@ are in `.agents/rules/`; role definitions ship in the plugin, `plugin/agents/`.
 - Public repositories: no personal emails, private host values, local paths or
   private terms in commits, code, issues or pull requests.
 
+## Governance
+`.agents/rules/governance.md` defines the actors, the autonomy levels (A0 auto,
+A1 measured, A2 owner), decision rights, the unattended loop, escalation, the
+public surface and incidents. `.agents/rules/permissions.md` maps the levels to
+the permission layers. The work left to 1.0 is `docs/roadmap.md`.
+
 ## Which node does what
 See `.agents/rules/devices.md`. Work is routed by labels; a node claims an item
 before starting (`.agents/rules/claims.md`).
