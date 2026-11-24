@@ -9,6 +9,7 @@ mod history;
 mod install;
 mod mail;
 mod mcp;
+mod migrate;
 mod plan;
 mod policy;
 mod render;
@@ -28,6 +29,7 @@ fn main() -> ExitCode {
         Some("history-check") => history_check(std::env::args().skip(2).collect()),
         Some("surface-check") => surface_check(std::env::args().skip(2).collect()),
         Some("validate") => validate_dir(std::env::args().nth(2)),
+        Some("migrate") => migrate::cli::main(std::env::args().skip(2).collect()),
         Some("render") => render::cli::main(std::env::args().skip(2).collect()),
         Some("sync") => sync::main(std::env::args().skip(2).collect()),
         Some("node") if std::env::args().nth(2).as_deref() == Some("install") => {
@@ -46,6 +48,10 @@ fn main() -> ExitCode {
             );
             eprintln!("       playpilot claim|release <owner/repo#n> ... (playpilot claim --help)");
             eprintln!("       playpilot validate <fleet-dir>");
+            eprintln!(
+                "       {}",
+                migrate::cli::USAGE.trim_start_matches("usage: ")
+            );
             eprintln!("       {PLAN_USAGE}");
             eprintln!(
                 "       playpilot render <settings|prompt|node> ... (playpilot render --help)"

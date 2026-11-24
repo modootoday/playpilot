@@ -1418,3 +1418,208 @@ mod roles_rules {
         assert_eq!(file_name("implementer"), "playpilot-implementer.md");
     }
 }
+
+mod migrate_rules {
+    use crate::migrate::cli::parse;
+    use crate::migrate::{Outcome, Registry, Step, has_comments, migrate_text};
+    use toml::{Table, Value};
+
+    const V0: &str = "test.example/v0";
+    const V1: &str = "playpilot.io/v1";
+    const V2: &str = "test.example/v2";
+
+    /// Fake v0 -> v1: `spec.lane` (one string) became `spec.lanes` (a list).
+    fn lane_to_lanes(t: &mut Table) -> Result<(), String> {
+        let spec = t
+            .get_mut("spec")
+            .and_then(Value::as_table_mut)
+            .ok_or("spec is required")?;
+        if let Some(v) = spec.remove("lane") {
+            spec.insert("lanes".into(), Value::Array(vec![v]));
+        }
+        Ok(())
+    }
+
+    fn no_change(_: &mut Table) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn fake() -> Registry {
+        Registry {
+            versions: vec![V0, V1, V2],
+            steps: vec![
+                Step {
+                    from: V1,
+                    to: V2,
+                    rewrite: no_change,
+                },
+                Step {
+                    from: V0,
+                    to: V1,
+                    rewrite: lane_to_lanes,
+                },
+            ],
+        }
+    }
+
+    fn project(api: &str, body: &str) -> String {
+        format!(
+            "apiVersion = \"{api}\"   # version line\nkind = \"Project\"\n[metadata]\nname = \"p\"\n[spec]\n{body}"
+        )
+    }
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn builtin_knows_only_v1_and_v1_is_a_no_op() {
+        let r = Registry::builtin();
+        assert_eq!(r.newest(), V1);
+        assert!(r.plan(V1, V1).unwrap().is_empty());
+        let text = project(V1, "lanes = [\"a\"]\n");
+        assert_eq!(migrate_text(&r, "f", &text, V1), Ok(Outcome::Unchanged));
+    }
+
+    #[test]
+    fn unknown_and_newer_versions_are_errors() {
+        let r = fake();
+        assert!(
+            r.plan("other/v9", V1)
+                .unwrap_err()
+                .contains("unknown apiVersion")
+        );
+        assert!(
+            r.plan(V1, "other/v9")
+                .unwrap_err()
+                .contains("unknown target")
+        );
+        assert!(
+            r.plan(V2, V1)
+                .unwrap_err()
+                .contains("newer than the target")
+        );
+        let builtin = Registry::builtin();
+        assert!(migrate_text(&builtin, "f", &project(V2, ""), V1).is_err());
+        assert!(migrate_text(&builtin, "f", "kind = \"Lane\"\n", V1).is_err());
+        assert!(migrate_text(&builtin, "f", "not toml = = 1", V1).is_err());
+    }
+
+    #[test]
+    fn plans_chain_steps_in_order() {
+        let r = fake();
+        let steps = r.plan(V0, V2).unwrap();
+        let path: Vec<_> = steps.iter().map(|s| (s.from, s.to)).collect();
+        assert_eq!(path, vec![(V0, V1), (V1, V2)]);
+        assert_eq!(r.plan(V0, V1).unwrap().len(), 1);
+        let gap = Registry {
+            versions: vec![V0, V1, V2],
+            steps: vec![],
+        };
+        assert!(gap.plan(V0, V2).unwrap_err().contains("no migration step"));
+    }
+
+    #[test]
+    fn chained_rewrite_applies_every_step() {
+        let out = migrate_text(&fake(), "f", &project(V0, "lane = \"a\"\n"), V2).unwrap();
+        let Outcome::Rewrite { from, text, lossy } = out else {
+            panic!("expected a rewrite");
+        };
+        assert_eq!(from, V0);
+        assert!(lossy, "the field rewrite cannot keep the comment");
+        let t: Table = text.parse().unwrap();
+        assert_eq!(t["apiVersion"].as_str(), Some(V2));
+        assert_eq!(t["spec"]["lanes"], Value::Array(vec!["a".into()]));
+        assert!(t["spec"].get("lane").is_none());
+    }
+
+    #[test]
+    fn version_only_bump_keeps_comments() {
+        let text = project(V1, "# keep me\nlanes = [\"a\"]  # and me\n");
+        let out = migrate_text(&fake(), "f", &text, V2).unwrap();
+        let Outcome::Rewrite {
+            text: new, lossy, ..
+        } = out
+        else {
+            panic!("expected a rewrite");
+        };
+        assert!(!lossy);
+        assert_eq!(new, text.replace(V1, V2));
+    }
+
+    #[test]
+    fn rewrite_without_comments_is_not_lossy() {
+        let text = "apiVersion = \"test.example/v0\"\nkind = \"Project\"\n[metadata]\nname = \"p#1\"\n[spec]\nlane = \"a\"\n";
+        let out = migrate_text(&fake(), "f", text, V1).unwrap();
+        assert!(
+            matches!(out, Outcome::Rewrite { lossy: false, .. }),
+            "{out:?}"
+        );
+    }
+
+    #[test]
+    fn finds_comments_outside_strings_only() {
+        assert!(has_comments("a = 1 # c\n"));
+        assert!(has_comments("# top\na = 1\n"));
+        assert!(!has_comments("a = \"x#y\"\nb = 'p#q'\n"));
+        assert!(!has_comments("a = \"\"\"\nx # y\n\"\"\"\nb = '''#'''\n"));
+        assert!(!has_comments("a = \"q\\\"#\"\n"));
+        assert!(has_comments("a = \"q\\\\\" # c\n"));
+    }
+
+    #[test]
+    fn check_refuse_force_and_write_on_disk() {
+        use crate::migrate::cli::{Args, run};
+        let dir = std::env::temp_dir().join(format!("playpilot-migrate-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("nested")).unwrap();
+        let bump = dir.join("bump.toml");
+        let field = dir.join("nested").join("field.toml");
+        std::fs::write(&bump, project(V1, "lanes = []\n")).unwrap();
+        std::fs::write(&field, project(V0, "lane = \"a\"\n")).unwrap();
+        let a = |check, force| Args {
+            dir: dir.display().to_string(),
+            to: Some(V2.into()),
+            check,
+            force,
+        };
+        let before = std::fs::read_to_string(&field).unwrap();
+        assert_eq!(run(&a(true, false), &fake()), Ok(false));
+        assert_eq!(
+            run(&a(false, false), &fake()),
+            Ok(false),
+            "lossy needs --force"
+        );
+        assert_eq!(std::fs::read_to_string(&field).unwrap(), before);
+        assert_eq!(run(&a(false, true), &fake()), Ok(true));
+        assert!(
+            std::fs::read_to_string(&bump)
+                .unwrap()
+                .contains("# version line")
+        );
+        assert!(
+            std::fs::read_to_string(&field)
+                .unwrap()
+                .contains("lanes = [\"a\"]")
+        );
+        assert_eq!(run(&a(true, false), &fake()), Ok(true), "now clean");
+        std::fs::write(dir.join("bad.toml"), project("other/v9", "")).unwrap();
+        assert!(run(&a(true, false), &fake()).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn parses_cli_arguments() {
+        let a = parse(args(&["--check", "--to", V1, "fleet"])).unwrap();
+        assert!(a.check && !a.force);
+        assert_eq!((a.dir.as_str(), a.to.as_deref()), ("fleet", Some(V1)));
+        let b = parse(args(&["fleet", "--force"])).unwrap();
+        assert!(b.force && !b.check && b.to.is_none());
+        assert!(parse(args(&[])).is_none());
+        assert!(parse(args(&["--check"])).is_none());
+        assert!(parse(args(&["--to"])).is_none());
+        assert!(parse(args(&["a", "b"])).is_none());
+        assert!(parse(args(&["--check", "--check", "a"])).is_none());
+        assert!(parse(args(&["--help"])).is_none());
+    }
+}

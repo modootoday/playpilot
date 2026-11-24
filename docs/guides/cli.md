@@ -94,6 +94,33 @@ playpilot validate <fleet-dir>
 
 Exit `0` valid, `1` lists problems.
 
+## migrate
+
+Rewrites every resource in a fleet configuration directory from its
+`apiVersion` to a target version, one registered step at a time.
+
+```
+playpilot migrate [--check] [--force] [--to <apiVersion>] <fleet-dir>
+```
+
+- `--to` defaults to the newest version this build knows. Today that is
+  `playpilot.io/v1` and no steps exist, so `migrate` only reads and validates
+  (the same checks as `validate`) and changes nothing.
+- `--check` writes nothing; it lists each file that would change and exits `1`,
+  or exits `0` when nothing would.
+- Without `--check`, changed files are written in place. A rewrite that only
+  bumps `apiVersion` edits that one line and keeps comments. A rewrite that
+  changes other fields cannot keep TOML comments; `migrate` names those files
+  and writes nothing unless `--force` is given.
+- An unknown `apiVersion`, a version newer than the target (no downgrades), a
+  missing step or a result that does not validate exits `1` and writes
+  nothing. Usage errors exit `64`.
+
+```
+$ playpilot migrate --check fleet
+migrate: 13 resource(s) already at playpilot.io/v1; nothing to change
+```
+
 ## render
 
 Writes files from the fleet configuration repository (`--config`, default the
