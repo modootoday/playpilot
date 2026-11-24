@@ -5,5 +5,6 @@ name = "linear-lanes"
 [spec]
 kind = "wasm-component"                       # or "process" (JSON-RPC over stdio)
 interface = "playpilot:fleet/lane-source@1.0.0"
-source = { url = "https://github.com/example/linear-lanes/releases/download/v0.1.0/plugin.wasm", sha256 = "<pinned digest>" }
+# Pinned by URL and SHA-256; the digest here is a placeholder.
+source = { url = "https://example.invalid/linear-lanes/v0.1.0/plugin.wasm", sha256 = "0000000000000000000000000000000000000000000000000000000000000000" }
 grants = { network = ["api.linear.app"], secrets = ["LINEAR_TOKEN"] }   # nothing else

@@ -37,7 +37,7 @@ owner), `optional`.
 | R7 | A0 | — | **`migrate`** (done, #40): framework that rewrites resources between API versions; v1 → v1 is a no-op that only validates | Tests; `migrate --check` on the fleet is clean |
 | R8 | A0 | — | **Public status page**: `/v1/state` public subset rendered on the docs site (no device names) | Page shows lanes, open claims count, last run per project |
 | R9 | A0 | R11 | **Install redirects** (`get.` host): `install.sh`, `install.ps1`, `/v/<version>/<target>` → release asset + SHA-256 | Installs a released binary on Linux and Windows |
-| R10 | A0 | — | **Plugin index** (`plugins.` host): generated from `Plugin` resources, pinned by URL and SHA-256 | Index validates against the schema |
+| R10 | A0 | — | **Plugin index** (`plugins.` host): generated from `Plugin` resources, pinned by URL and SHA-256 | Index validates against the schema. **done** (#41): `render plugins` |
 | R11 | A2 | — | **First release v0.1.0**: owner creates the `release` environment, applies `v-tags`, runs the workflow | Release with three archives, SHA256SUMS, attestations |
 | R12 | A0 | R11 | **Pin by version**: fleet `playpilot.lock` holds a version; `--version` prints version and rev; the setup script and hooks install the release asset instead of building | Fresh container installs in under 30 s |
 | R13 | A1 | — | **Plugin host**: WASM component host (WIT `playpilot:fleet@1.0.0`) for `policy-check` (refuse only) and `event-sink`; fail-closed for policy, log-and-continue for sinks | Example plugins of both kinds pass; a crashing policy plugin blocks |
