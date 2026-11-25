@@ -332,7 +332,17 @@ so a tool call cannot speak for another actor. Exits `0` when stdin closes.
 ## playpilot-worker
 
 The optional Cloudflare Worker (`crates/playpilot-worker`) is not a CLI
-subcommand. It serves the HTTP API, leases, the mailbox and a remote `/mcp`
-endpoint with the same tool names. Build and deploy notes, secrets and
-access checks are in
-[Central management](../config-and-extensions.md#5-central-management-git-first-worker-optional).
+subcommand. It serves the HTTP API, leases, the mailbox, a remote `/mcp`
+endpoint with the same tool names, and inbound GitHub webhooks on
+`POST /hooks/github`. Routes and how each authenticates:
+
+| Route | Auth | Host |
+| --- | --- | --- |
+| `/v1/*` (except public `GET /v1/state`) | Access service token, JWT verified by the Worker | behind Access |
+| `POST /mcp` | `Authorization: Bearer`, hash in `PLAYPILOT_MCP_TOKENS` | without Access |
+| `POST /hooks/github` | `X-Hub-Signature-256` under `PLAYPILOT_GITHUB_WEBHOOK_SECRET` only | without Access |
+
+Build and deploy notes, secrets and access checks are in
+[Central management](../config-and-extensions.md#5-central-management-git-first-worker-optional);
+webhook setup is in
+[Inbound GitHub webhooks](../config-and-extensions.md#inbound-github-webhooks).

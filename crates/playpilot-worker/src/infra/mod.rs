@@ -1,10 +1,11 @@
-//! Workers runtime bindings: the fetch entry point, the router and the three
+//! Workers runtime bindings: the fetch entry point, the router and the four
 //! Durable Object classes. Logic lives in `crate::domain`.
 
 mod access;
 mod api;
 mod auth;
 mod call;
+mod hooks;
 mod http;
 mod mcp;
 mod objects;
@@ -35,6 +36,7 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     };
     match (route, caller) {
         (Route::State, _) => api::state(&env).await,
+        (Route::GithubHook, _) => hooks::github(req, &env).await,
         (Route::NotFound, _) => http::problem(404, "Not found", "no such endpoint"),
         (Route::MethodNotAllowed(allow), _) => http::method_not_allowed(allow),
         (Route::Config, Some(_)) => api::config(&req, &env).await,

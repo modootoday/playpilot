@@ -4,6 +4,8 @@ pub mod access;
 pub mod bus;
 pub mod config;
 pub mod event;
+pub mod eventlog;
+pub mod hook;
 pub mod identity;
 pub mod ids;
 pub mod lease;
