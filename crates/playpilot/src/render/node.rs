@@ -129,6 +129,10 @@ pub fn wsl_unit(capacity: u32) -> String {
 /// Replaced with `DOMAIN\\user` by the register command `node install` prints,
 /// so the logon trigger is the installing user's own and needs no elevation.
 pub const TASK_USER: &str = "__PLAYPILOT_TASK_USER__";
+/// Task Scheduler does not expand `%APPDATA%` or `%USERPROFILE%` in
+/// `<Arguments>`, so the register command fills in the absolute paths.
+pub const TASK_APPDATA: &str = "__PLAYPILOT_APPDATA__";
+pub const TASK_PROFILE: &str = "__PLAYPILOT_USERPROFILE__";
 
 /// A per-user Task Scheduler task: starts `rc-server.ps1` (installed by
 /// `bootstrap.ps1` into `%APPDATA%\fleet`) at logon and restarts it on failure.
@@ -170,8 +174,8 @@ pub fn windows_task(capacity: u32, workspace: &str) -> String {
             "    <Exec>\n",
             "      <Command>powershell.exe</Command>\n",
             "      <Arguments>-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden ",
-            "-File \"%APPDATA%\\fleet\\rc-server.ps1\" ",
-            "-Workspace \"%USERPROFILE%\\fleet\\{workspace}\" -Capacity {capacity}</Arguments>\n",
+            "-File \"{appdata}\\fleet\\rc-server.ps1\" ",
+            "-Workspace \"{profile}\\fleet\\{workspace}\" -Capacity {capacity}</Arguments>\n",
             "    </Exec>\n",
             "  </Actions>\n",
             "</Task>\n"
@@ -179,5 +183,7 @@ pub fn windows_task(capacity: u32, workspace: &str) -> String {
         capacity = capacity,
         workspace = workspace,
         user = TASK_USER,
+        appdata = TASK_APPDATA,
+        profile = TASK_PROFILE,
     )
 }

@@ -128,16 +128,22 @@ pub fn next_steps(platform: Platform, files: &[Output], workspace: Option<&str>)
                 workspace.unwrap_or("<dir under ~/fleet>")
             ),
         ],
-        Platform::Windows => files
-            .iter()
-            .map(|f| {
+        Platform::Windows => {
+            let mut steps = vec![format!(
+                "Set-Location \"$env:USERPROFILE\\fleet\\{}\"; claude  # once: accept the workspace trust dialog, then exit",
+                workspace.unwrap_or("<dir>")
+            )];
+            steps.extend(files.iter().map(|f| {
                 let path = f.path.display().to_string().replace('\'', "''");
                 format!(
-                    "Register-ScheduledTask -TaskName claude-rc -Xml ((Get-Content -Raw '{path}') -replace '{user}', \"$env:USERDOMAIN\\$env:USERNAME\")",
-                    user = node::TASK_USER
+                    "Register-ScheduledTask -TaskName claude-rc -Xml ((Get-Content -Raw '{path}') -replace '{user}', \"$env:USERDOMAIN\\$env:USERNAME\" -replace '{appdata}', $env:APPDATA -replace '{profile}', $env:USERPROFILE)",
+                    user = node::TASK_USER,
+                    appdata = node::TASK_APPDATA,
+                    profile = node::TASK_PROFILE,
                 )
-            })
-            .collect(),
+            }));
+            steps
+        }
     }
 }
 
