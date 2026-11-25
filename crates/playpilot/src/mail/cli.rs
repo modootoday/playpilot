@@ -4,7 +4,7 @@ use std::process::ExitCode;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::Backend;
-use super::message::Envelope;
+use super::message::{Envelope, Stored};
 use super::transport::Receipt;
 
 pub const USAGE: &str = "\
@@ -85,6 +85,34 @@ fn read_body(a: &Args) -> Result<String, String> {
     }
 }
 
+/// One message as `inbox` and `read` print it: a header line, then the
+/// body indented by four spaces.
+pub fn render(m: &Stored) -> String {
+    let e = &m.envelope;
+    let state = match (m.read, m.acked) {
+        (_, true) => "acked",
+        (true, false) => "read",
+        _ => "new",
+    };
+    let mut out = format!(
+        "{}  {}  {} -> {}  [{state}]  {}{}\n",
+        m.id,
+        m.created_at,
+        e.from,
+        e.to,
+        e.subject,
+        e.re.as_deref()
+            .map(|r| format!("  (re {r})"))
+            .unwrap_or_default()
+    );
+    for line in e.body.lines() {
+        out.push_str("    ");
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
+}
+
 fn run(args: Vec<String>) -> Result<(), String> {
     let a = parse(args)?;
     let backend = Backend::from_env(a.repo.clone())
@@ -116,37 +144,17 @@ fn run(args: Vec<String>) -> Result<(), String> {
                 println!("inbox: nothing new");
             }
             for m in messages {
-                let e = &m.envelope;
-                let state = match (m.read, m.acked) {
-                    (_, true) => "acked",
-                    (true, false) => "read",
-                    _ => "new",
-                };
-                println!(
-                    "{}  {}  {} -> {}  [{state}]  {}{}",
-                    m.id,
-                    m.created_at,
-                    e.from,
-                    e.to,
-                    e.subject,
-                    e.re.as_deref()
-                        .map(|r| format!("  (re {r})"))
-                        .unwrap_or_default()
-                );
-                for line in e.body.lines() {
-                    println!("    {line}");
-                }
+                print!("{}", render(&m));
             }
         }
-        "read" | "ack" => {
+        "read" => {
             let id = a.id.ok_or("give the message id")?;
-            let kind = if a.verb == "read" {
-                Receipt::Read
-            } else {
-                Receipt::Ack
-            };
-            super::mark(t, id, kind)?;
-            println!("{} {id}", a.verb);
+            print!("{}", render(&super::read(t, &actor()?, id)?));
+        }
+        "ack" => {
+            let id = a.id.ok_or("give the message id")?;
+            super::mark(t, id, Receipt::Ack)?;
+            println!("ack {id}");
         }
         other => return Err(format!("unknown mail verb `{other}`")),
     }
