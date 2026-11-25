@@ -98,7 +98,9 @@ pub fn select(runtimes: &[Runtime], platform: Platform) -> Result<Vec<Runtime>, 
 }
 
 /// Where the service files go: `$XDG_CONFIG_HOME/systemd/user` (default
-/// `$HOME/.config`) on Linux, `%APPDATA%\fleet` on Windows.
+/// `$HOME/.config`) on Linux, `%USERPROFILE%\fleet\.node` on Windows. Not
+/// `%APPDATA%`: an MSIX-packaged app (the Claude desktop app) writes there
+/// into its private copy, which Task Scheduler never sees.
 pub fn install_dir(
     platform: Platform,
     env: impl Fn(&str) -> Option<String>,
@@ -112,9 +114,11 @@ pub fn install_dir(
             };
             Ok(config.join("systemd").join("user"))
         }
-        Platform::Windows => {
-            Ok(PathBuf::from(set("APPDATA").ok_or("APPDATA is not set")?).join("fleet"))
-        }
+        Platform::Windows => Ok(
+            PathBuf::from(set("USERPROFILE").ok_or("USERPROFILE is not set")?)
+                .join("fleet")
+                .join(".node"),
+        ),
     }
 }
 
@@ -136,9 +140,8 @@ pub fn next_steps(platform: Platform, files: &[Output], workspace: Option<&str>)
             steps.extend(files.iter().map(|f| {
                 let path = f.path.display().to_string().replace('\'', "''");
                 format!(
-                    "Register-ScheduledTask -TaskName claude-rc -Xml ((Get-Content -Raw '{path}') -replace '{user}', \"$env:USERDOMAIN\\$env:USERNAME\" -replace '{appdata}', $env:APPDATA -replace '{profile}', $env:USERPROFILE)",
+                    "Register-ScheduledTask -TaskName claude-rc -Xml ((Get-Content -Raw '{path}') -replace '{user}', \"$env:USERDOMAIN\\$env:USERNAME\" -replace '{profile}', $env:USERPROFILE)",
                     user = node::TASK_USER,
-                    appdata = node::TASK_APPDATA,
                     profile = node::TASK_PROFILE,
                 )
             }));

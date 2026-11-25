@@ -9,7 +9,11 @@ if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
     Invoke-RestMethod https://claude.ai/install.ps1 | Invoke-Expression
 }
 cargo install --locked --path (Join-Path $repo 'crates\playpilot')
-$cfg = Join-Path $env:APPDATA 'fleet'
+# Not %APPDATA%: run from an MSIX app (the Claude desktop app), writes there land
+# in the package's private copy, which Task Scheduler never sees.
+$cfg = Join-Path $env:USERPROFILE 'fleet\.node'
+$old = Join-Path $env:APPDATA 'fleet'
+if (Test-Path $old) { Write-Host "Note: $old is no longer used (node files now live in $cfg); it was left in place." }
 New-Item -ItemType Directory -Force $cfg | Out-Null
 Copy-Item (Join-Path $repo 'profiles\node.settings.json') (Join-Path $cfg 'node.settings.json') -Force
 Copy-Item (Join-Path $PSScriptRoot 'rc-server.ps1') (Join-Path $cfg 'rc-server.ps1') -Force

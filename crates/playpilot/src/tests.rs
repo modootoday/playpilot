@@ -703,7 +703,11 @@ mod render_rules {
         assert!(xml.contains("<RunLevel>LeastPrivilege</RunLevel>"));
         assert!(xml.contains("<RestartOnFailure>"));
         assert!(xml.contains("rc-server.ps1"));
-        assert!(xml.contains("-File \"__PLAYPILOT_APPDATA__\\fleet\\rc-server.ps1\""));
+        assert!(xml.contains("-File \"__PLAYPILOT_USERPROFILE__\\fleet\\.node\\rc-server.ps1\""));
+        assert!(
+            !xml.contains("APPDATA"),
+            "an MSIX app's %APPDATA% writes are invisible to Task Scheduler"
+        );
         assert!(
             xml.contains("-Workspace \"__PLAYPILOT_USERPROFILE__\\fleet\\playpilot\" -Capacity 1<")
         );
@@ -1274,10 +1278,15 @@ mod install_rules {
         );
         assert!(install_dir(Platform::Linux, env(&[("HOME", "")])).is_err());
         assert_eq!(
-            install_dir(Platform::Windows, env(&[("APPDATA", "appdata")])).unwrap(),
-            PathBuf::from("appdata").join("fleet")
+            install_dir(
+                Platform::Windows,
+                env(&[("USERPROFILE", "profile"), ("APPDATA", "appdata")])
+            )
+            .unwrap(),
+            PathBuf::from("profile").join("fleet").join(".node")
         );
         assert!(install_dir(Platform::Windows, env(&[])).is_err());
+        assert!(install_dir(Platform::Windows, env(&[("APPDATA", "appdata")])).is_err());
     }
 
     #[cfg(unix)]
@@ -1320,7 +1329,7 @@ mod install_rules {
             steps[1]
                 .contains("-replace '__PLAYPILOT_TASK_USER__', \"$env:USERDOMAIN\\$env:USERNAME\"")
         );
-        assert!(steps[1].contains("-replace '__PLAYPILOT_APPDATA__', $env:APPDATA"));
+        assert!(!steps[1].contains("APPDATA"));
         assert!(steps[1].ends_with("-replace '__PLAYPILOT_USERPROFILE__', $env:USERPROFILE)"));
         assert!(targets(&BOTH[1..], None, dir).is_err());
     }

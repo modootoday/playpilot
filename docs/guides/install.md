@@ -66,12 +66,11 @@ carries no policy. `render node` writes one file per entry in the device's
 `spec.runtimes`: `claude-rc@.service` for `wsl` (install it under
 `~/.config/systemd/user/`) and `claude-rc.xml` for `windows`, a Task Scheduler
 task that starts `rc-server.ps1` at logon for `%USERPROFILE%\fleet\<dir>` and
-restarts it on failure. The file holds three placeholders that the register
+restarts it on failure. The file holds two placeholders that the register
 command `node install` prints fills in: `__PLAYPILOT_TASK_USER__` (the logon
 trigger and principal, so the task is the installing user's own and needs no
-elevation), and `__PLAYPILOT_APPDATA__` / `__PLAYPILOT_USERPROFILE__` (absolute
-paths, because Task Scheduler does not expand `%APPDATA%` or `%USERPROFILE%`
-in a task's arguments). Before the task can serve, run `claude` once in the
+elevation) and `__PLAYPILOT_USERPROFILE__` (an absolute path, because Task
+Scheduler does not expand `%USERPROFILE%` in a task's arguments). Before the task can serve, run `claude` once in the
 workspace and accept the trust dialog (the first printed step); without it
 `rc-server.ps1` retries every 30 seconds. `--workspace` is needed only for `windows`.
 The capacity in each file comes from the runtime entry. Without `--out` the
@@ -90,7 +89,13 @@ playpilot sync --project <name> --repo <project checkout>
 On the node itself, `node install` puts the service file for this platform
 where the service manager reads it: `claude-rc@.service` into
 `~/.config/systemd/user/` on Linux and WSL, `claude-rc.xml` into
-`%APPDATA%\fleet\` on Windows.
+`%USERPROFILE%\fleet\.node\` on Windows, next to `rc-server.ps1` and
+`node.settings.json` that `runtimes/windows/bootstrap.ps1` puts there.
+Windows node files avoid `%APPDATA%` because the Claude desktop app is an MSIX
+package: what a session started from it writes under `%APPDATA%` lands in the
+package's private copy, which Task Scheduler cannot see, so the task would exit
+at once. `%USERPROFILE%` is not virtualized. An older `%APPDATA%\fleet` is no
+longer used; `bootstrap.ps1` says so and leaves it in place.
 
 ```
 playpilot node install --device <name> --workspace <dir> --dry-run

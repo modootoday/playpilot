@@ -220,7 +220,7 @@ playpilot node install --device <name> [--config <fleet repo>] [--workspace <dir
 
 Puts this node's `render node` output in its OS location: the systemd user unit
 under `$XDG_CONFIG_HOME/systemd/user/` (or `~/.config/systemd/user/`) on Linux,
-the Task Scheduler XML under `%APPDATA%\fleet\` on Windows. It prints the
+the Task Scheduler XML under `%USERPROFILE%\fleet\.node\` on Windows. It prints the
 enable commands and never runs them. An identical file is a no-op; a different
 file is refused without `--force`.
 
