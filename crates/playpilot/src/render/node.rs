@@ -133,6 +133,8 @@ pub const TASK_USER: &str = "__PLAYPILOT_TASK_USER__";
 /// register command fills in the absolute path.
 pub const TASK_PROFILE: &str = "__PLAYPILOT_USERPROFILE__";
 
+/// The action runs through `conhost.exe --headless` because
+/// `powershell -WindowStyle Hidden` alone still flashes a console at logon.
 /// A per-user Task Scheduler task: starts `rc-server.ps1` (installed by
 /// `bootstrap.ps1` into `%USERPROFILE%\fleet\.node`) at logon and restarts it
 /// on failure.
@@ -158,6 +160,7 @@ pub fn windows_task(capacity: u32, workspace: &str) -> String {
             "    </Principal>\n",
             "  </Principals>\n",
             "  <Settings>\n",
+            "    <Hidden>true</Hidden>\n",
             "    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\n",
             "    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>\n",
             "    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>\n",
@@ -172,8 +175,8 @@ pub fn windows_task(capacity: u32, workspace: &str) -> String {
             "  </Settings>\n",
             "  <Actions Context=\"Author\">\n",
             "    <Exec>\n",
-            "      <Command>powershell.exe</Command>\n",
-            "      <Arguments>-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden ",
+            "      <Command>conhost.exe</Command>\n",
+            "      <Arguments>--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden ",
             "-File \"{profile}\\fleet\\.node\\rc-server.ps1\" ",
             "-Workspace \"{profile}\\fleet\\{workspace}\" -Capacity {capacity}</Arguments>\n",
             "    </Exec>\n",

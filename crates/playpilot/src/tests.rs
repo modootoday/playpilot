@@ -702,6 +702,9 @@ mod render_rules {
         );
         assert!(xml.contains("<RunLevel>LeastPrivilege</RunLevel>"));
         assert!(xml.contains("<RestartOnFailure>"));
+        assert!(xml.contains("<Hidden>true</Hidden>"));
+        assert!(xml.contains("<Command>conhost.exe</Command>"));
+        assert!(xml.contains("<Arguments>--headless powershell.exe -NoProfile "));
         assert!(xml.contains("rc-server.ps1"));
         assert!(xml.contains("-File \"__PLAYPILOT_USERPROFILE__\\fleet\\.node\\rc-server.ps1\""));
         assert!(
