@@ -1,6 +1,6 @@
 # Runs the Remote Control server for one workspace and restarts it if it exits.
 param([Parameter(Mandatory)][string]$Workspace, [int]$Capacity = 2)
-$settings = Join-Path $env:APPDATA 'fleet\node.settings.json'
+$settings = Join-Path $env:USERPROFILE 'fleet\.node\node.settings.json'
 $env:PLAYPILOT_RUNTIME = 'windows'
 Set-Location $Workspace
 while ($true) {

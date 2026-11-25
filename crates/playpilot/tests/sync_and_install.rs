@@ -1,6 +1,7 @@
 //! `sync` and `node install` write paths, run as the built binary against a
 //! temporary directory. The install base is redirected through the variables
-//! the OS conventions use (`HOME`, `XDG_CONFIG_HOME`, `APPDATA`).
+//! the OS conventions use (`HOME`, `XDG_CONFIG_HOME`, `USERPROFILE`); `APPDATA` is set too and must be
+//! ignored.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -59,6 +60,7 @@ fn playpilot(args: &[&str], base: &Path) -> Output {
         .args(args)
         .env("HOME", base)
         .env("XDG_CONFIG_HOME", base.join(".config"))
+        .env("USERPROFILE", base)
         .env("APPDATA", base.join("AppData"))
         .output()
         .unwrap()
@@ -168,7 +170,7 @@ fn node_install_writes_once_and_refuses_local_edits() {
         "example",
     ];
     let target = if cfg!(windows) {
-        s.0.join("AppData").join("fleet").join("claude-rc.xml")
+        s.0.join("fleet").join(".node").join("claude-rc.xml")
     } else {
         s.0.join(".config")
             .join("systemd")
