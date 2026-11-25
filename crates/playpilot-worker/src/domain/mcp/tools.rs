@@ -1,10 +1,11 @@
-//! The tool set of the local `playpilot mcp`, with the same names, parsed
-//! into commands. Credentials decide who the caller may be; the only
+//! The tool set of the local `playpilot mcp`, with the same names, plus the
+//! Worker-only `events_read`, parsed into commands. Credentials decide who the caller may be; the only
 //! identity argument is `as`, which picks one of the actors the credential
 //! allows. Other unknown keys are refused.
 
 use serde_json::{Value, json};
 
+use super::events::{self, EventsRead};
 use crate::domain::bus::message::{Stored, render};
 use crate::domain::ids::{ItemRef, valid_lane};
 use crate::domain::lease::{Lease, LeaseError};
@@ -37,6 +38,7 @@ pub enum Command {
     TaskRelease {
         item: ItemRef,
     },
+    EventsRead(EventsRead),
     Whoami,
 }
 
@@ -97,6 +99,12 @@ pub fn list() -> Vec<Value> {
             "name": "task_release",
             "description": "Release a lane item this caller holds.",
             "inputSchema": schema(json!({"item": {"type": "string"}, "note": {"type": "string"}}), &["item"])
+        }),
+        json!({
+            "name": events::NAME,
+            "description": events::DESCRIPTION,
+            "inputSchema": schema(events::properties(), &[]),
+            "annotations": {"readOnlyHint": true}
         }),
         json!({
             "name": "whoami",
@@ -183,6 +191,7 @@ fn parse_command(name: &str, args: &Value) -> Result<Command, String> {
         "task_release" => Command::TaskRelease {
             item: item_arg(args)?,
         },
+        "events_read" => Command::EventsRead(events::parse(args)?),
         "whoami" => Command::Whoami,
         _ => return Err(format!("unknown tool `{name}`")),
     })
@@ -257,7 +266,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn same_tool_names_as_local_server() {
+    fn same_tool_names_as_local_server_plus_events() {
         let names: Vec<String> = list()
             .iter()
             .map(|t| t["name"].as_str().unwrap().into())
@@ -271,6 +280,7 @@ mod tests {
                 "mail_ack",
                 "task_claim",
                 "task_release",
+                "events_read",
                 "whoami"
             ]
         );

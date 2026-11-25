@@ -77,9 +77,9 @@ pub fn bearer_grant(req: &Request, env: &Env) -> std::result::Result<Grant, Resu
         Err(resp)
     };
     let header = req.headers().get("Authorization").ok().flatten();
-    let Some(token) = bearer(header.as_deref()) else {
+    if bearer(header.as_deref()).is_none() {
         return deny();
-    };
+    }
     let map = match settings::tokens(env) {
         Ok(m) => m,
         Err(e) => {
@@ -87,7 +87,7 @@ pub fn bearer_grant(req: &Request, env: &Env) -> std::result::Result<Grant, Resu
             return deny();
         }
     };
-    match map.authenticate(token) {
+    match map.grant_for(header.as_deref()) {
         Some(g) => Ok(g.clone()),
         None => deny(),
     }

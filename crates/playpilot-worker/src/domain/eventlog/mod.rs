@@ -1,6 +1,6 @@
 //! `EventsObject`: the ordered log of inbound events (GitHub deliveries),
 //! de-duplicated by delivery id, with bounded retention. `Read` is the
-//! internal cursor read a later `events tail` uses; no route serves it yet.
+//! cursor read behind the `/mcp` tool `events_read` (`playpilot events tail`).
 
 pub mod store;
 
