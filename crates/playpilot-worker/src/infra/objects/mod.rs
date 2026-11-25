@@ -6,6 +6,7 @@ mod events;
 mod lease;
 mod node;
 mod sql_bus;
+mod sql_deliveries;
 mod sql_events;
 
 use worker::{Request, Response, Result};

@@ -1,4 +1,5 @@
-//! Stored inbound events, read from the Worker (`playpilot events tail`).
+//! Stored inbound events and outbound webhook deliveries, read from the
+//! Worker (`playpilot events tail`, `playpilot events deliveries`).
 //!
 //! Layers: the page and line format below (domain), `source` (port and the
 //! Worker adapter over `/mcp` `events_read`) and `cli` (presentation and the
@@ -6,6 +7,7 @@
 //! printed, never interpreted.
 
 pub mod cli;
+pub mod deliveries;
 pub mod source;
 
 use serde_json::Value;

@@ -6,6 +6,7 @@ pub mod store;
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::outbound::{self, Delivery, store::DeliveryStore};
 use store::EventStore;
 
 /// Events kept: the newest `MAX_EVENTS`, none older than `MAX_AGE`.
@@ -27,17 +28,26 @@ pub struct Entry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LogCmd {
-    /// A verified event; `id` is the dedupe key.
+    /// A verified event; `id` is the dedupe key. A new event is queued for
+    /// each named outbound webhook (`crate::domain::outbound`).
     Record {
         id: String,
         ty: String,
         json: String,
+        #[serde(default)]
+        webhooks: Vec<String>,
     },
     /// Events after `after` (a `seq`), oldest first; `ty_prefix` filters by type.
     Read {
         after: u64,
         limit: usize,
         ty_prefix: Option<String>,
+    },
+    /// Outbound deliveries after `after` (a delivery `seq`), oldest first.
+    Deliveries {
+        after: u64,
+        limit: usize,
+        webhook: Option<String>,
     },
 }
 
@@ -46,6 +56,7 @@ pub enum LogReply {
     Recorded { seq: u64 },
     Duplicate,
     Events(Vec<Entry>),
+    Deliveries(Vec<Delivery>),
     Error(String),
 }
 
@@ -82,14 +93,34 @@ pub fn read(
     store.after(after, limit, ty_prefix)
 }
 
-pub fn apply(store: &dyn EventStore, cmd: LogCmd, now: u64) -> LogReply {
+pub fn apply(
+    store: &dyn EventStore,
+    outbox: &dyn DeliveryStore,
+    cmd: LogCmd,
+    now: u64,
+) -> LogReply {
     let result = match cmd {
-        LogCmd::Record { id, ty, json } => record(store, &id, &ty, &json, now),
+        LogCmd::Record {
+            id,
+            ty,
+            json,
+            webhooks,
+        } => record(store, &id, &ty, &json, now).and_then(|reply| {
+            if matches!(reply, LogReply::Recorded { .. }) {
+                outbound::enqueue(outbox, &webhooks, &id, &ty, &json, now)?;
+            }
+            Ok(reply)
+        }),
         LogCmd::Read {
             after,
             limit,
             ty_prefix,
         } => read(store, after, limit, ty_prefix.as_deref()).map(LogReply::Events),
+        LogCmd::Deliveries {
+            after,
+            limit,
+            webhook,
+        } => outbound::read(outbox, after, limit, webhook.as_deref()).map(LogReply::Deliveries),
     };
     result.unwrap_or_else(LogReply::Error)
 }
@@ -98,14 +129,17 @@ pub fn apply(store: &dyn EventStore, cmd: LogCmd, now: u64) -> LogReply {
 mod tests {
     use super::store::Memory;
     use super::*;
+    use crate::domain::outbound::store::Memory as Outbox;
 
     fn rec(s: &Memory, id: &str, ty: &str, now: u64) -> LogReply {
         apply(
             s,
+            &Outbox::default(),
             LogCmd::Record {
                 id: id.into(),
                 ty: ty.into(),
                 json: format!("{{\"id\":\"{id}\"}}"),
+                webhooks: vec![],
             },
             now,
         )

@@ -5,6 +5,7 @@ use crate::domain::eventlog::store::Memory;
 use crate::domain::eventlog::{LogReply, apply};
 use crate::domain::mcp::protocol::{Step, handle};
 use crate::domain::mcp::tools::Command;
+use crate::domain::outbound::store::Memory as Outbox;
 use crate::domain::token::{TokenMap, sha256_hex};
 
 fn store(types: &[&str]) -> Memory {
@@ -15,8 +16,9 @@ fn store(types: &[&str]) -> Memory {
             id: format!("d-{i}"),
             ty: (*ty).into(),
             json,
+            webhooks: vec![],
         };
-        apply(&s, cmd, 100 + i as u64);
+        apply(&s, &Outbox::default(), cmd, 100 + i as u64);
     }
     s
 }
@@ -25,7 +27,7 @@ fn store(types: &[&str]) -> Memory {
 /// `EventsObject` command against the store.
 fn call(s: &Memory, args: Value) -> Result<(EventsRead, Vec<Entry>), String> {
     let r = parse(&args)?;
-    match apply(s, command(&r), 1_000) {
+    match apply(s, &Outbox::default(), command(&r), 1_000) {
         LogReply::Events(list) => Ok((r, list)),
         other => Err(format!("{other:?}")),
     }

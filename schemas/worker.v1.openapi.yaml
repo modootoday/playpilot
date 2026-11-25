@@ -185,7 +185,9 @@ paths:
         `data` is the allow-listed `GithubEventData` projection; the payload
         text itself is never stored, executed or interpreted. Deliveries are
         de-duplicated by `X-GitHub-Delivery` for 14 days; the log keeps the
-        newest 1000 events and none older than 14 days.
+        newest 1000 events and none older than 14 days. A newly stored event
+        is queued for the matching outbound `Webhook` resources (see
+        `webhooks.storedEvent`); a duplicate is not queued again.
       security: []
       parameters:
         - name: X-Hub-Signature-256
@@ -252,6 +254,57 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+webhooks:
+  storedEvent:
+    post:
+      operationId: deliverStoredEvent
+      summary: Outbound delivery of a stored event to a Webhook resource
+      description: |
+        Sent by the Worker, not served by it. Each newly stored inbound event
+        is queued once per outbound `Webhook` resource whose `events` type
+        prefixes match (on dot boundaries) and sent from the `EventsObject`
+        alarm, signed with the Standard Webhooks scheme: `webhook-signature`
+        is `v1,<base64 HMAC-SHA256>` of `{webhook-id}.{webhook-timestamp}.{body}`
+        under the decoded `whsec_` secret held in the Worker secret binding
+        the resource names. `webhook-id` is the same on every attempt and
+        re-delivery; `webhook-timestamp` and the signature are per attempt.
+        A 2xx answer delivers; 410 disables the target until its URL
+        changes; anything else, a timeout (10 s) or a network error is
+        retried after 30 s, 2 min, 10 min, 1 h and 6 h, then the delivery
+        fails. Redirects are not followed. Without the secret binding
+        nothing is sent and the delivery fails.
+      security: []
+      parameters:
+        - name: webhook-id
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^msg_[0-9a-f]{32}$'
+        - name: webhook-timestamp
+          in: header
+          required: true
+          description: Unix seconds of this attempt.
+          schema:
+            type: string
+            pattern: '^[0-9]+$'
+        - name: webhook-signature
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^v1,[A-Za-z0-9+/]+={0,2}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GithubEvent'
+      responses:
+        '2XX':
+          description: Delivered.
+        '410':
+          description: Gone; the Worker stops sending to this target.
 components:
   securitySchemes:
     cfAccessClientId:

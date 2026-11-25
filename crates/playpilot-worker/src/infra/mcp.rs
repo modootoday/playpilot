@@ -10,6 +10,7 @@ use crate::domain::bus::message::{Envelope, Receipt};
 use crate::domain::bus::{BusCmd, BusReply};
 use crate::domain::eventlog::LogReply;
 use crate::domain::lease::{LeaseCmd, LeaseReply, Limits, clamp_ttl};
+use crate::domain::mcp::deliveries::{self, DeliveriesRead};
 use crate::domain::mcp::events::{self, EventsRead};
 use crate::domain::mcp::protocol::{Step, handle as parse, tool_result, tool_result_structured};
 use crate::domain::mcp::tools::{self, Command, Invocation};
@@ -64,6 +65,9 @@ async fn run(env: &Env, caller: &Caller, id: &Value, call: Invocation) -> Value 
     if let Command::EventsRead(read) = &call.command {
         return read_events(env, caller, id, read, call.as_actor.as_deref()).await;
     }
+    if let Command::DeliveriesRead(read) = &call.command {
+        return read_deliveries(env, caller, id, read, call.as_actor.as_deref()).await;
+    }
     tool_result(id, run_text(env, caller, call).await)
 }
 
@@ -88,6 +92,27 @@ async fn read_events(
     }
 }
 
+async fn read_deliveries(
+    env: &Env,
+    caller: &Caller,
+    id: &Value,
+    read: &DeliveriesRead,
+    as_actor: Option<&str>,
+) -> Value {
+    if let Err(e) = events::authorize(caller, as_actor) {
+        return tool_result(id, Err(e));
+    }
+    match call::events(env, &deliveries::command(read)).await {
+        Ok(LogReply::Deliveries(list)) => tool_result_structured(
+            id,
+            deliveries::render(read.after, &list),
+            deliveries::structured(read.after, &list),
+        ),
+        Ok(LogReply::Error(e)) | Err(e) => tool_result(id, Err(e)),
+        Ok(other) => tool_result(id, Err(format!("unexpected reply {other:?}"))),
+    }
+}
+
 async fn run_text(
     env: &Env,
     caller: &Caller,
@@ -97,9 +122,10 @@ async fn run_text(
     let actor = me.actor.clone();
     let command = call.command;
     match command {
-        Command::Whoami | Command::MailInbox { .. } | Command::EventsRead(_) => {
-            Err("handled above".into())
-        }
+        Command::Whoami
+        | Command::MailInbox { .. }
+        | Command::EventsRead(_)
+        | Command::DeliveriesRead(_) => Err("handled above".into()),
         Command::MailSend {
             to,
             subject,

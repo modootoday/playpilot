@@ -29,13 +29,13 @@ Every subcommand uses the same small set:
 | `PLAYPILOT_DEVICE` | `whoami` | device name when `--device` is not given |
 | `PLAYPILOT_ACTOR` | `mail`, `mcp`, `claim`, `release` | this session's actor (mailbox name); the claim id when `PLAYPILOT_CLAIM_ID` is unset |
 | `PLAYPILOT_CLAIM_ID` | `claim`, `release`, `mcp` | the id written on claims; use one that names no device |
-| `PLAYPILOT_MAIL_URL` | `mail`, `mcp`, `claim`, `release`, `events` | the Worker's `/mcp` URL; when set, mail goes through the Worker; the lease endpoint for `--backend worker`; the event source for `events tail` |
+| `PLAYPILOT_MAIL_URL` | `mail`, `mcp`, `claim`, `release`, `events` | the Worker's `/mcp` URL; when set, mail goes through the Worker; the lease endpoint for `--backend worker`; the event source for `events tail` and `events deliveries` |
 | `PLAYPILOT_MCP_TOKEN` | `mail`, `mcp`, `claim`, `release`, `events` | bearer token for the Worker's `/mcp` |
 | `PLAYPILOT_CLAIM_BACKEND` | `claim`, `release` | `github` (default) or `worker`, when `--backend` is not given |
 | `PLAYPILOT_MAILBOX_REPO` | `mail`, `mcp` | `owner/name` of the mailbox repository (GitHub transport) |
 
 `claim`, `release` and the GitHub mail transport call GitHub through the `gh`
-CLI and its login. The Worker mail transport, Worker leases and `events tail` use `curl`.
+CLI and its login. The Worker mail transport, Worker leases, `events tail` and `events deliveries` use `curl`.
 
 ## guard
 
@@ -98,7 +98,9 @@ Exit `0` passes, `1` lists findings, `2` when git cannot read the range.
 
 Checks a fleet configuration directory: schema and semantics (references
 resolve, every lane has a capable device, profiles only narrow, no secret or
-private host values).
+private host values, and outbound `Webhook` resources name a public https
+URL, a `PLAYPILOT_WEBHOOK_SECRET_<NAME>` signing secret and dotted type
+prefixes; [Outbound webhooks](../config-and-extensions.md#outbound-webhooks)).
 
 ```
 playpilot validate <fleet-dir>
@@ -353,6 +355,31 @@ read events. Event data is printed, never interpreted. Exit `0` on success,
 `1` on failure (a read error without `--follow`, or no `PLAYPILOT_MAIL_URL`),
 `64` on a usage error.
 
+## events deliveries
+
+Prints the outbound webhook deliveries the Worker keeps
+([Outbound webhooks](../config-and-extensions.md#outbound-webhooks)), oldest
+first, through the `/mcp` tool `deliveries_read`.
+
+```
+playpilot events deliveries [--webhook <name>] [--after <seq>] [--limit <n>] [--json]
+```
+
+Each delivery is one line: `seq`, last update, webhook, event type, state
+(`pending`, `delivered` or `failed`), attempts, then the last HTTP status, the
+next retry and the reason when there are any:
+
+```
+4  2026-11-25T10:00:30Z  owner-notify  com.github.push  pending  attempts 2  http 503  next 2026-11-25T10:02:30Z  (HTTP 503)
+5  2026-11-25T10:00:31Z  owner-notify  com.github.ping  delivered  attempts 1  http 204
+```
+
+`--webhook` keeps one `Webhook` resource; `--after` starts after a `seq`
+(default `0`); `--limit` is 1 to 200 (default 100); `--json` prints each row as
+the Worker returned it. The cursor for the next page is printed on stderr as
+`next: <seq>`. Rows never hold URLs, secrets or bodies. Same Worker and token
+as `events tail`; exit `0` on success, `1` on failure, `64` on a usage error.
+
 ## mcp
 
 A Model Context Protocol server on stdio that exposes the same use cases as
@@ -372,7 +399,9 @@ so a tool call cannot speak for another actor. Exits `0` when stdin closes.
 The optional Cloudflare Worker (`crates/playpilot-worker`) is not a CLI
 subcommand. It serves the HTTP API, leases, the mailbox, a remote `/mcp`
 endpoint with the same tool names plus `events_read` (the stored events, read by
-`events tail`), and inbound GitHub webhooks on
+`events tail`) and `deliveries_read` (outbound webhook deliveries, read by
+`events deliveries`), signed outbound webhook deliveries from the
+`EventsObject` alarm, and inbound GitHub webhooks on
 `POST /hooks/github`. Routes and how each authenticates:
 
 | Route | Auth | Host |
@@ -384,4 +413,5 @@ endpoint with the same tool names plus `events_read` (the stored events, read by
 Build and deploy notes, secrets and access checks are in
 [Central management](../config-and-extensions.md#5-central-management-git-first-worker-optional);
 webhook setup is in
-[Inbound GitHub webhooks](../config-and-extensions.md#inbound-github-webhooks).
+[Inbound GitHub webhooks](../config-and-extensions.md#inbound-github-webhooks)
+and [Outbound webhooks](../config-and-extensions.md#outbound-webhooks).

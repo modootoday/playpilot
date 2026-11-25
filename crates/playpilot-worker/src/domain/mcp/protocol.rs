@@ -119,7 +119,7 @@ mod tests {
             Step::Accepted
         );
         let list = reply_of(handle(r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#));
-        assert_eq!(list["result"]["tools"].as_array().unwrap().len(), 8);
+        assert_eq!(list["result"]["tools"].as_array().unwrap().len(), 9);
         let ping = reply_of(handle(r#"{"jsonrpc":"2.0","id":"p","method":"ping"}"#));
         assert_eq!(ping["id"], "p");
     }

@@ -51,7 +51,8 @@ The CLI, the Worker and plugins are adapters around the same ports
   `fleet.node.offline`, `fleet.config.applied`).
 - Outbound: `Webhook` resources, signed with the Standard Webhooks scheme
   (`webhook-id`, `webhook-timestamp`, `webhook-signature`), retries with
-  backoff, idempotent by event id.
+  backoff, idempotent by event id
+  ([Outbound webhooks](#outbound-webhooks)).
 - Inbound: GitHub webhooks (and other sources) arrive only at the Worker,
   are verified, normalised to the same CloudEvents, then fanned out.
 - Events carry data, never commands. A node maps an event to a fixed local
@@ -139,7 +140,7 @@ App installation (issues/labels write, contents read) and, only for waking
 sessions, per-task routine tokens (below); no other Claude credentials.
 The Worker lives in `crates/playpilot-worker` (Durable Objects `LeaseObject`,
 `NodeObject`, `BusObject`, `EventsObject`, plus a remote MCP endpoint `POST /mcp` with the
-local `playpilot mcp` tool names and `events_read`). Build with `worker-build --release`.
+local `playpilot mcp` tool names, `events_read` and `deliveries_read`). Build with `worker-build --release`.
 
 Access check. The Worker does not trust Access headers as such: on `/v1/*`
 it verifies `Cf-Access-Jwt-Assertion` (RS256, signed by a key from
@@ -263,6 +264,92 @@ Owner setup (A2; agents never set the secret or create the hook):
 4. Check the hook's "Recent deliveries" page: `202` for the ping, and
    "Redeliver" answers `200` with `duplicate`.
 
+### Outbound webhooks
+
+A `Webhook` resource with `direction = "outbound"` (the default) receives
+every newly stored inbound event whose type matches its filter, signed with
+the [Standard Webhooks](https://www.standardwebhooks.com/) scheme:
+
+```toml
+apiVersion = "playpilot.io/v1"
+kind = "Webhook"
+[metadata]
+name = "owner-notify"
+[spec]
+direction = "outbound"
+url = "https://hooks.example.com/playpilot"   # or { secretRef = "PLAYPILOT_WEBHOOK_URL_OWNER" }
+signing = { scheme = "standard-webhooks", secretRef = "PLAYPILOT_WEBHOOK_SECRET_OWNER" }
+format = "cloudevents/1.0"
+events = ["com.github.pull_request", "com.github.check_suite.completed"]
+```
+
+| Field | Rule (`playpilot validate`, repeated by the Worker before each send) |
+| --- | --- |
+| `url` | `https://` only; no user info, no IPv6 literal, no loopback, private, link-local or reserved IPv4, no single-label host, `localhost`, `.local`, `.internal`, `.lan` or `.home.arpa`. Or `{ secretRef = "PLAYPILOT_WEBHOOK_URL_<NAME>" }`, a Worker secret holding such a URL |
+| `signing.secretRef` | the name of a Worker secret binding `PLAYPILOT_WEBHOOK_SECRET_<NAME>` holding `whsec_<base64>` (at least 16 key bytes); never the value |
+| `events` | at least one type prefix on dot boundaries, the `events_read` syntax: `com.github.pull_request` matches `com.github.pull_request.opened`, not `com.github.pull_request_review` |
+
+The Worker reads the targets from the compiled config (`CONFIG` /
+`PLAYPILOT_CONFIG`). A webhook paused by `ops` (file or Worker) gets no new
+deliveries, and its queued ones fail at their next attempt; an inbound one,
+or one that breaks a rule above, is ignored.
+
+Delivery semantics:
+
+- **Queue**: when `POST /hooks/github` stores a new event, `EventsObject`
+  queues one delivery per matching webhook, keyed by (webhook, event id). A
+  re-delivered inbound event is a duplicate and queues nothing, and the key
+  refuses a second row anyway, so one event never yields two `webhook-id`s.
+- **Request**: `POST` to the URL with the stored CloudEvent JSON as the body
+  (`content-type: application/json`), `webhook-id: msg_<32 hex>` (derived
+  from the webhook and event id, the same on every attempt),
+  `webhook-timestamp` (Unix seconds of this attempt) and `webhook-signature:
+  v1,<base64 HMAC-SHA256 of "{id}.{timestamp}.{body}">` under the decoded
+  secret. Redirects are not followed; each request is aborted after 10 s.
+- **Outcome**: a `2xx` answer delivers. `410 Gone` fails the delivery and
+  disables that webhook at that URL (later deliveries fail unsent) until the
+  URL changes. Anything else, a timeout or a network error is retried after
+  30 s, 2 min, 10 min, 1 h and 6 h; after the sixth attempt the delivery
+  fails. The alarm sends at most one delivery per webhook per run, oldest
+  first, and re-arms at once while more are due.
+- **Fail closed**: a missing secret binding, a value that is not
+  `whsec_<base64>`, a URL binding that is unset or breaks the rules, or a
+  webhook that is no longer configured fails the delivery without sending
+  anything. Secret values never appear in state, logs or replies.
+- **Crash safety**: an attempt is booked (and its retry scheduled) before
+  the request goes out, so a lost outcome is retried with the same
+  `webhook-id`; receivers de-duplicate on it, as the scheme expects.
+- **Retention**: pending deliveries stay until they finish; finished ones are
+  kept for 14 days, at most the newest 1000.
+
+Reading delivery state. The `/mcp` tool `deliveries_read` (Worker only)
+takes `after` (a delivery `seq`), `limit` (default 100, capped at 200) and
+`webhook` (a resource name); `structuredContent` is `{"deliveries": [{"seq",
+"id", "webhook", "event_id", "type", "state", "attempts", "last_status",
+"detail", "next_at", "created_at", "updated_at"}], "next"}`, with `state`
+one of `pending`, `delivered`, `failed`. Rows never carry URLs, secrets or
+bodies, so any valid `/mcp` token may read them. `playpilot events
+deliveries` is the CLI for it.
+
+Owner steps to add a target (A2; agents never set secrets, deploy or create
+the receiving endpoint):
+
+1. Create the receiving endpoint and generate its secret there, in the
+   `whsec_<base64>` form (for example `whsec_` followed by 24 or more random
+   bytes in base64).
+2. From `crates/playpilot-worker`, enter it only at the prompt:
+   `wrangler secret put PLAYPILOT_WEBHOOK_SECRET_<NAME> --env stage`. To keep
+   the URL out of the configuration as well, also
+   `wrangler secret put PLAYPILOT_WEBHOOK_URL_<NAME> --env stage` and use
+   `url = { secretRef = "PLAYPILOT_WEBHOOK_URL_<NAME>" }`.
+3. Add the `Webhook` resource to the fleet configuration (a `needs-human`
+   change, §6), run `playpilot validate`, and publish the compiled config to
+   the Worker's `CONFIG` namespace.
+4. Trigger an inbound event (for example "Redeliver" a GitHub ping to a new
+   delivery, or any matching repository activity) and check
+   `playpilot events deliveries --webhook <name>`: `delivered` with `http
+   2xx`, or the retry and its reason.
+
 ## 6. Change control
 
 | Change | Path |
@@ -275,7 +362,7 @@ Owner setup (A2; agents never set the secret or create the hook):
 
 Implemented: `guard`, `history-check`, `surface-check`, `validate`, `migrate`,
 `render settings | roles | prompt | node | plugins`, `sync`, `node install`, `plan`, `whoami`,
-`claim`, `release`, `mail send | inbox | read | ack`, `events tail` and `mcp`. Usage, exit codes and environment
+`claim`, `release`, `mail send | inbox | read | ack`, `events tail | deliveries` and `mcp`. Usage, exit codes and environment
 variables are in the [CLI reference](guides/cli.md).
 
 - `plan`: who does what (device × lane × project × role), and what is uncovered.

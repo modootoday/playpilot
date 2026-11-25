@@ -312,3 +312,78 @@ fn lines_drop_control_characters() {
     e.source = "https://github.com/o\u{1b}[2J".into();
     assert!(!line(&e).contains('\u{1b}'));
 }
+
+mod deliveries_cli {
+    use serde_json::{Value, json};
+
+    use super::super::deliveries::{Options, parse, print};
+    use super::super::source::WorkerEvents;
+    use super::{Script, s};
+
+    fn row(seq: u64, state: &str, status: Option<u16>, next: Option<&str>) -> Value {
+        json!({
+            "seq": seq, "id": "msg_0123", "webhook": "owner-notify", "event_id": "d-1",
+            "type": "com.github.push", "state": state, "attempts": 2,
+            "last_status": status, "detail": status.map(|s| format!("HTTP {s}")),
+            "next_at": next, "created_at": "2026-11-25T10:00:00Z",
+            "updated_at": "2026-11-25T10:00:30Z"
+        })
+    }
+
+    #[test]
+    fn parses_options() {
+        let o = parse(&s(&[
+            "--webhook",
+            "owner-notify",
+            "--after",
+            "3",
+            "--limit",
+            "5",
+            "--json",
+        ]))
+        .unwrap();
+        assert_eq!(
+            o,
+            Options {
+                webhook: Some("owner-notify".into()),
+                after: 3,
+                limit: 5,
+                json: true
+            }
+        );
+        assert!(parse(&s(&["--webhook"])).is_err());
+        assert!(parse(&s(&["--limit", "0"])).is_err());
+        assert!(parse(&s(&["--follow"])).is_err());
+    }
+
+    #[test]
+    fn prints_rows_from_deliveries_read() {
+        let reply = (
+            200,
+            json!({"jsonrpc": "2.0", "id": 1, "result": {
+                "content": [{"type": "text", "text": "deliveries"}],
+                "isError": false,
+                "structuredContent": {"deliveries": [
+                    row(4, "pending", Some(503), Some("2026-11-25T10:02:30Z")),
+                    row(5, "delivered", Some(204), None)
+                ], "next": 5}
+            }}),
+        );
+        let script = Script::new(vec![Ok(reply)]);
+        let src = WorkerEvents::new(&script);
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let o = parse(&s(&["--webhook", "owner-notify", "--after", "3"])).unwrap();
+        print(&src, &o, &mut out, &mut err).unwrap();
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            "4  2026-11-25T10:00:30Z  owner-notify  com.github.push  pending  attempts 2  http 503  next 2026-11-25T10:02:30Z  (HTTP 503)\n\
+             5  2026-11-25T10:00:30Z  owner-notify  com.github.push  delivered  attempts 2  http 204  (HTTP 204)\n"
+        );
+        assert_eq!(String::from_utf8(err).unwrap(), "next: 5\n");
+        assert_eq!(script.seen.borrow()[0]["params"]["name"], "deliveries_read");
+        assert_eq!(
+            script.args(0),
+            json!({"after": 3, "limit": 100, "webhook": "owner-notify"})
+        );
+    }
+}

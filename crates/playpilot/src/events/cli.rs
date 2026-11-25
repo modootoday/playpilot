@@ -5,11 +5,12 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use super::source::{EventSource, Query, WorkerEvents};
-use super::{MAX_LIMIT, backoff, json_line, line};
+use super::{MAX_LIMIT, backoff, deliveries, json_line, line};
 use crate::mail::worker::Curl;
 
 pub const USAGE: &str = "\
 usage: playpilot events tail [--type <prefix>] [--after <seq>] [--limit <n>] [--follow [--interval <secs>]] [--json]
+       playpilot events deliveries [--webhook <name>] [--after <seq>] [--limit <n>] [--json]
 source: the Worker at PLAYPILOT_MAIL_URL (token from PLAYPILOT_MCP_TOKEN, if set)";
 
 pub const DEFAULT_LIMIT: usize = 100;
@@ -135,6 +136,26 @@ pub fn tail(
     }
 }
 
+fn deliveries_main(args: &[String]) -> ExitCode {
+    let o = match deliveries::parse(args) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("playpilot events: {e}\n{}", deliveries::USAGE);
+            return ExitCode::from(64);
+        }
+    };
+    let run = worker().and_then(|src| {
+        deliveries::print(&src, &o, &mut std::io::stdout(), &mut std::io::stderr())
+    });
+    match run {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("playpilot events: {e}");
+            ExitCode::from(1)
+        }
+    }
+}
+
 fn worker() -> Result<WorkerEvents, String> {
     let url = std::env::var("PLAYPILOT_MAIL_URL")
         .ok()
@@ -150,6 +171,9 @@ pub fn main(args: Vec<String>) -> ExitCode {
     if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
         eprintln!("{USAGE}");
         return ExitCode::from(64);
+    }
+    if args[0] == "deliveries" {
+        return deliveries_main(&args[1..]);
     }
     let o = match parse(&args) {
         Ok(o) => o,
