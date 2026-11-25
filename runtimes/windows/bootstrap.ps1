@@ -13,4 +13,4 @@ $cfg = Join-Path $env:APPDATA 'fleet'
 New-Item -ItemType Directory -Force $cfg | Out-Null
 Copy-Item (Join-Path $repo 'profiles\node.settings.json') (Join-Path $cfg 'node.settings.json') -Force
 Copy-Item (Join-Path $PSScriptRoot 'rc-server.ps1') (Join-Path $cfg 'rc-server.ps1') -Force
-Write-Host "Next (owner, once): claude auth login; then register the task from playpilot render node: Register-ScheduledTask -TaskName claude-rc -Xml (Get-Content -Raw claude-rc.xml)."
+Write-Host "Next (owner, once): claude auth login; then register the task from playpilot render node: the Register-ScheduledTask command that playpilot node install prints (it fills in this user)."

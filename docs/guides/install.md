@@ -66,8 +66,12 @@ carries no policy. `render node` writes one file per entry in the device's
 `spec.runtimes`: `claude-rc@.service` for `wsl` (install it under
 `~/.config/systemd/user/`) and `claude-rc.xml` for `windows`, a Task Scheduler
 task that starts `rc-server.ps1` at logon for `%USERPROFILE%\fleet\<dir>` and
-restarts it on failure (`Register-ScheduledTask -TaskName claude-rc -Xml
-(Get-Content -Raw claude-rc.xml)`). `--workspace` is needed only for `windows`.
+restarts it on failure. The task is the installing user's own (its logon
+trigger and principal name `__PLAYPILOT_TASK_USER__`, which the register
+command replaces), so no elevation is needed:
+`Register-ScheduledTask -TaskName claude-rc -Xml ((Get-Content -Raw claude-rc.xml)
+-replace '__PLAYPILOT_TASK_USER__', "$env:USERDOMAIN\$env:USERNAME")`.
+`node install` prints this command with the file's full path. `--workspace` is needed only for `windows`.
 The capacity in each file comes from the runtime entry. Without `--out` the
 files are printed; `--check` exits 1 when a file differs.
 

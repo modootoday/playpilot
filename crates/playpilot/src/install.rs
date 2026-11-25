@@ -133,7 +133,8 @@ pub fn next_steps(platform: Platform, files: &[Output], workspace: Option<&str>)
             .map(|f| {
                 let path = f.path.display().to_string().replace('\'', "''");
                 format!(
-                    "Register-ScheduledTask -TaskName claude-rc -Xml (Get-Content -Raw '{path}')"
+                    "Register-ScheduledTask -TaskName claude-rc -Xml ((Get-Content -Raw '{path}') -replace '{user}', \"$env:USERDOMAIN\\$env:USERNAME\")",
+                    user = node::TASK_USER
                 )
             })
             .collect(),

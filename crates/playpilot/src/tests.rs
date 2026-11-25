@@ -691,6 +691,16 @@ mod render_rules {
         );
         let xml = &files[1].text;
         assert!(xml.contains("<LogonTrigger>"));
+        assert!(
+            xml.starts_with("<?xml version=\"1.0\"?>"),
+            "no encoding: -Xml takes a UTF-16 string"
+        );
+        assert_eq!(
+            xml.matches("<UserId>__PLAYPILOT_TASK_USER__</UserId>")
+                .count(),
+            2
+        );
+        assert!(xml.contains("<RunLevel>LeastPrivilege</RunLevel>"));
         assert!(xml.contains("<RestartOnFailure>"));
         assert!(xml.contains("rc-server.ps1"));
         assert!(xml.contains("-Workspace \"%USERPROFILE%\\fleet\\playpilot\" -Capacity 1<"));
@@ -1291,8 +1301,15 @@ mod install_rules {
         let steps = next_steps(Platform::Windows, &windows, Some("example"));
         assert_eq!(steps.len(), 1);
         assert!(
-            steps[0]
-                .starts_with("Register-ScheduledTask -TaskName claude-rc -Xml (Get-Content -Raw '")
+            steps[0].starts_with(
+                "Register-ScheduledTask -TaskName claude-rc -Xml ((Get-Content -Raw '"
+            )
+        );
+        assert!(steps[0].contains(crate::render::node::TASK_USER));
+        assert!(
+            steps[0].ends_with(
+                "-replace '__PLAYPILOT_TASK_USER__', \"$env:USERDOMAIN\\$env:USERNAME\")"
+            )
         );
         assert!(targets(&BOTH[1..], None, dir).is_err());
     }
