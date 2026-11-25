@@ -310,8 +310,11 @@ playpilot mail ack   <message-id>
 
 Common options: `--repo <owner/name>` (or `PLAYPILOT_MAILBOX_REPO`) and
 `--as <actor>` (or `PLAYPILOT_ACTOR`). `--to all` copies a message into every
-other mailbox. `inbox` lists unacked messages (`--all` includes acked ones);
-`read` and `ack` mark a message read or handled. The Worker at
+other mailbox. `inbox` lists unacked messages (`--all` includes acked ones).
+`read` prints one message from the actor's mailbox (or the broadcast box) the
+way `inbox` does, header line then the indented body, and marks it read. It
+fails, marking nothing, when the id is not in that mailbox. `ack` marks a
+message handled. The Worker at
 `PLAYPILOT_MAIL_URL` is used when set, otherwise the GitHub repository. Exit
 `0` on success, `1` on failure, `64` on `--help` or a missing verb.
 

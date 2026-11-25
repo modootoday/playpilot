@@ -119,6 +119,23 @@ pub fn mark(t: &dyn Transport, id: u64, kind: Receipt) -> Result<(), String> {
     t.receipt(id, kind)
 }
 
+/// Finds message `id` in `actor`'s mailbox (or the broadcast box), marks it
+/// read and returns it with the receipt applied. Nothing is marked when it is
+/// not there.
+pub fn read(t: &dyn Transport, actor: &str, id: u64) -> Result<Stored, String> {
+    if !valid_actor(actor) {
+        return Err(format!("`{actor}` is not a valid actor name"));
+    }
+    let mut found = t.list(actor)?.into_iter().find(|m| m.id == id);
+    if found.is_none() && actor != BROADCAST {
+        found = t.list(BROADCAST)?.into_iter().find(|m| m.id == id);
+    }
+    let mut m = found.ok_or_else(|| format!("no message {id} in the {actor} mailbox"))?;
+    t.receipt(id, Receipt::Read)?;
+    m.read = true;
+    Ok(m)
+}
+
 /// Where the mailboxes are: the Worker when `PLAYPILOT_MAIL_URL` is set,
 /// otherwise the GitHub repository.
 #[derive(Debug, Clone, PartialEq, Eq)]

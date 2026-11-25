@@ -391,6 +391,31 @@ mod mail_rules {
     }
 
     #[test]
+    fn read_returns_the_message_then_marks_it() {
+        use crate::mail::cli::render;
+        use crate::mail::read;
+        let t = Fake::default();
+        let id = t.send("playpilot", &env("design", "playpilot")).unwrap();
+        let m = read(&t, "playpilot", id).unwrap();
+        assert_eq!(m.envelope.body, "line one\nline two");
+        assert!(m.read, "the returned copy shows the receipt");
+        assert!(t.list("playpilot").unwrap()[0].read);
+        let text = render(&m);
+        assert!(
+            text.starts_with(&format!(
+                "{id}  2026-11-11T00:00:00Z  design -> playpilot  [read]  s  (re org/repo#1)\n"
+            )),
+            "{text}"
+        );
+        assert!(text.ends_with("    line one\n    line two\n"), "{text}");
+        // Another mailbox's message is not readable, and nothing is marked.
+        let other = t.send("arks", &env("design", "arks")).unwrap();
+        assert!(read(&t, "playpilot", other).is_err());
+        assert!(!t.list("arks").unwrap()[0].read);
+        assert!(read(&t, "playpilot", 99).is_err());
+    }
+
+    #[test]
     fn broadcast_is_copied_to_every_other_mailbox() {
         let t = Fake {
             actors: ["all", "arks", "design", "kinekino"]
