@@ -126,12 +126,16 @@ pub fn wsl_unit(capacity: u32) -> String {
     )
 }
 
+/// Replaced with `DOMAIN\\user` by the register command `node install` prints,
+/// so the logon trigger is the installing user's own and needs no elevation.
+pub const TASK_USER: &str = "__PLAYPILOT_TASK_USER__";
+
 /// A per-user Task Scheduler task: starts `rc-server.ps1` (installed by
 /// `bootstrap.ps1` into `%APPDATA%\fleet`) at logon and restarts it on failure.
 pub fn windows_task(capacity: u32, workspace: &str) -> String {
     format!(
         concat!(
-            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n",
+            "<?xml version=\"1.0\"?>\n",
             "<Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\n",
             "  <RegistrationInfo>\n",
             "    <Description>Claude Code Remote Control server ({workspace})</Description>\n",
@@ -139,10 +143,12 @@ pub fn windows_task(capacity: u32, workspace: &str) -> String {
             "  <Triggers>\n",
             "    <LogonTrigger>\n",
             "      <Enabled>true</Enabled>\n",
+            "      <UserId>{user}</UserId>\n",
             "    </LogonTrigger>\n",
             "  </Triggers>\n",
             "  <Principals>\n",
             "    <Principal id=\"Author\">\n",
+            "      <UserId>{user}</UserId>\n",
             "      <LogonType>InteractiveToken</LogonType>\n",
             "      <RunLevel>LeastPrivilege</RunLevel>\n",
             "    </Principal>\n",
@@ -172,5 +178,6 @@ pub fn windows_task(capacity: u32, workspace: &str) -> String {
         ),
         capacity = capacity,
         workspace = workspace,
+        user = TASK_USER,
     )
 }
