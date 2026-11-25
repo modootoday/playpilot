@@ -325,8 +325,14 @@
       "properties": {
         "direction": { "enum": ["outbound", "inbound"] },
         "url": {
+          "description": "The target: an https URL to a public host (no user info, IPv6 literal, private, loopback or local host), or a Worker secret binding PLAYPILOT_WEBHOOK_URL_<NAME> holding one.",
           "anyOf": [
-            { "$ref": "#/$defs/secretRef" },
+            {
+              "type": "object",
+              "required": ["secretRef"],
+              "additionalProperties": false,
+              "properties": { "secretRef": { "type": "string", "pattern": "^PLAYPILOT_WEBHOOK_URL_[A-Z0-9_]+$" } }
+            },
             { "type": "string", "format": "uri", "pattern": "^https://" }
           ]
         },
@@ -336,14 +342,19 @@
           "additionalProperties": false,
           "properties": {
             "scheme": { "enum": ["standard-webhooks"] },
-            "secretRef": { "$ref": "#/$defs/secretName" }
+            "secretRef": {
+              "description": "The Worker secret binding holding the whsec_<base64> signing secret.",
+              "type": "string",
+              "pattern": "^PLAYPILOT_WEBHOOK_SECRET_[A-Z0-9_]+$"
+            }
           }
         },
         "format": { "const": "cloudevents/1.0" },
         "events": {
-          "description": "Event types without the fleet. prefix, e.g. run.finished.",
+          "description": "Type prefixes on dot boundaries, as events_read filters: com.github.pull_request matches com.github.pull_request.opened, not com.github.pull_request_review. Required for outbound webhooks.",
           "type": "array",
-          "items": { "type": "string", "pattern": "^[a-z]+(-[a-z]+)*(\\.[a-z]+(-[a-z]+)*)+$" },
+          "minItems": 1,
+          "items": { "type": "string", "maxLength": 200, "pattern": "^[a-z0-9_-]+(\\.[a-z0-9_-]+)*$" },
           "uniqueItems": true
         },
         "ops": { "$ref": "#/$defs/ops" },

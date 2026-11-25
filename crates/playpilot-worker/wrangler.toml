@@ -23,6 +23,11 @@
 # against the secret PLAYPILOT_GITHUB_WEBHOOK_SECRET (owner sets it with
 # wrangler secret put). Without it every delivery gets 503. Route /hooks/*
 # on a host without Access; GitHub cannot present an Access token.
+#
+# Outbound Webhook resources sign with the secret their signing.secretRef
+# names, PLAYPILOT_WEBHOOK_SECRET_<NAME> (whsec_<base64>), and may read their
+# URL from PLAYPILOT_WEBHOOK_URL_<NAME>; the owner sets both with wrangler
+# secret put. Without the signing secret a delivery fails unsent.
 name = "playpilot"
 main = "build/index.js"
 compatibility_date = "2026-11-01"

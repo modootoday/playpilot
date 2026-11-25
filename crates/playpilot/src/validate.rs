@@ -2,12 +2,15 @@
 //!
 //! Schema: every file is one `playpilot.io/v1` resource. Semantics: names are
 //! unique per kind, references resolve, every lane a project uses can be
-//! served by some device, and no literal secret values are present.
+//! served by some device, no literal secret values are present, and
+//! outbound webhooks name a public https target and secret bindings.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use toml::{Table, Value};
+
+pub mod webhook;
 
 pub const API_VERSION: &str = "playpilot.io/v1";
 
@@ -141,6 +144,11 @@ pub fn check(resources: &[Resource]) -> Vec<String> {
                 }
             }
             _ => {}
+        }
+    }
+    for r in resources.iter().filter(|r| r.kind == "Webhook") {
+        for p in webhook::check(&r.spec) {
+            problems.push(format!("{}: Webhook \"{}\": {p}", r.file, r.name));
         }
     }
     problems.extend(uncovered_lanes(resources));

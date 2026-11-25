@@ -4,6 +4,7 @@ use super::hmac::sign;
 use super::*;
 use crate::domain::eventlog::store::Memory;
 use crate::domain::eventlog::{LogCmd, LogReply, apply};
+use crate::domain::outbound::store::Memory as Outbox;
 
 /// Test vector only, not a deployed secret. gitleaks:allow
 const KEY: &str = "playpilot-test-webhook-key"; // gitleaks:allow
@@ -243,10 +244,12 @@ fn a_redelivery_is_stored_once() {
     let record = |r: Received| {
         apply(
             &store,
+            &Outbox::default(),
             LogCmd::Record {
                 id: r.id,
                 ty: r.ty,
                 json: r.json,
+                webhooks: vec![],
             },
             NOW,
         )

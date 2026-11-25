@@ -8,6 +8,7 @@ use crate::domain::config::{Compiled, Source, config_text};
 use crate::domain::identity::IdentityMap;
 use crate::domain::node::DEFAULT_OFFLINE_AFTER;
 use crate::domain::ops::{OpsTable, Switches};
+use crate::domain::outbound::target::{SECRET_PREFIX, URL_PREFIX};
 use crate::domain::token::{TokenMap, directory};
 use crate::domain::wake::WakeMap;
 
@@ -104,6 +105,22 @@ pub fn github_webhook_secret(env: &Env) -> Option<String> {
         .map(|s| s.to_string())
         .ok()
         .filter(|s| !s.is_empty())
+}
+
+/// A webhook signing secret or URL, read only as a Worker secret binding
+/// whose name the config named (`PLAYPILOT_WEBHOOK_SECRET_*` or
+/// `PLAYPILOT_WEBHOOK_URL_*`); unset or empty is `None` (fail closed).
+pub fn webhook_binding(env: &Env, name: &str) -> Option<String> {
+    let allowed = [SECRET_PREFIX, URL_PREFIX]
+        .iter()
+        .any(|p| name.starts_with(p));
+    if !allowed {
+        return None;
+    }
+    env.secret(name)
+        .map(|s| s.to_string())
+        .ok()
+        .filter(|s| !s.trim().is_empty())
 }
 
 pub fn offline_after(env: &Env) -> u64 {

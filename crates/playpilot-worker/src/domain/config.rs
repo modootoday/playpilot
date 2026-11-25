@@ -35,7 +35,7 @@ impl Compiled {
         })
     }
 
-    fn resources(&self) -> impl Iterator<Item = (&str, &str, &Value)> {
+    pub(crate) fn resources(&self) -> impl Iterator<Item = (&str, &str, &Value)> {
         self.body["resources"]
             .as_array()
             .into_iter()

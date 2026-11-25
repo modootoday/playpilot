@@ -1,10 +1,11 @@
 //! The tool set of the local `playpilot mcp`, with the same names, plus the
-//! Worker-only `events_read`, parsed into commands. Credentials decide who the caller may be; the only
+//! Worker-only `events_read` and `deliveries_read`, parsed into commands. Credentials decide who the caller may be; the only
 //! identity argument is `as`, which picks one of the actors the credential
 //! allows. Other unknown keys are refused.
 
 use serde_json::{Value, json};
 
+use super::deliveries::{self, DeliveriesRead};
 use super::events::{self, EventsRead};
 use crate::domain::bus::message::{Stored, render};
 use crate::domain::ids::{ItemRef, valid_lane};
@@ -39,6 +40,7 @@ pub enum Command {
         item: ItemRef,
     },
     EventsRead(EventsRead),
+    DeliveriesRead(DeliveriesRead),
     Whoami,
 }
 
@@ -104,6 +106,12 @@ pub fn list() -> Vec<Value> {
             "name": events::NAME,
             "description": events::DESCRIPTION,
             "inputSchema": schema(events::properties(), &[]),
+            "annotations": {"readOnlyHint": true}
+        }),
+        json!({
+            "name": deliveries::NAME,
+            "description": deliveries::DESCRIPTION,
+            "inputSchema": schema(deliveries::properties(), &[]),
             "annotations": {"readOnlyHint": true}
         }),
         json!({
@@ -192,6 +200,7 @@ fn parse_command(name: &str, args: &Value) -> Result<Command, String> {
             item: item_arg(args)?,
         },
         "events_read" => Command::EventsRead(events::parse(args)?),
+        "deliveries_read" => Command::DeliveriesRead(deliveries::parse(args)?),
         "whoami" => Command::Whoami,
         _ => return Err(format!("unknown tool `{name}`")),
     })
@@ -281,6 +290,7 @@ mod tests {
                 "task_claim",
                 "task_release",
                 "events_read",
+                "deliveries_read",
                 "whoami"
             ]
         );

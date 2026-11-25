@@ -12,6 +12,7 @@ pub mod lease;
 pub mod mcp;
 pub mod node;
 pub mod ops;
+pub mod outbound;
 pub mod problem;
 pub mod route;
 pub mod state;

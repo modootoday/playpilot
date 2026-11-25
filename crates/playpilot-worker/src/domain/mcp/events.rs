@@ -6,12 +6,12 @@
 use serde_json::{Value, json};
 
 use crate::domain::eventlog::{Entry, LogCmd, MAX_READ};
+use crate::domain::outbound::target::valid_prefix;
 use crate::domain::time::rfc3339;
 use crate::domain::token::Caller;
 
 /// Events per call when `limit` is not given.
 pub const DEFAULT_LIMIT: usize = 100;
-const MAX_PREFIX: usize = 200;
 
 /// A parsed `events_read` call.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,18 +33,7 @@ pub fn properties() -> Value {
     })
 }
 
-/// A type prefix: dot-separated parts of `[a-z0-9_-]`, no empty part.
-fn valid_prefix(p: &str) -> bool {
-    p.len() <= MAX_PREFIX
-        && p.split('.').all(|part| {
-            !part.is_empty()
-                && part
-                    .bytes()
-                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"_-".contains(&b))
-        })
-}
-
-fn uint(args: &Value, key: &str) -> Result<Option<u64>, String> {
+pub(crate) fn uint(args: &Value, key: &str) -> Result<Option<u64>, String> {
     match args.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(v) => v

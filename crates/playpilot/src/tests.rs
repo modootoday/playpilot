@@ -290,14 +290,70 @@ mod validate_rules {
     fn literal_secrets_and_duplicates() {
         let w = res(
             "w",
-            "kind = \"Webhook\"\n[metadata]\nname = \"w\"\n[spec]\ntoken = \"abc\"\nsigning = { secretRef = \"S\" }\n",
+            "kind = \"Webhook\"\n[metadata]\nname = \"w\"\n[spec]\ndirection = \"inbound\"\ntoken = \"abc\"\nsigning = { secretRef = \"S\" }\n",
         );
         let w2 = res(
             "w2",
-            "kind = \"Webhook\"\n[metadata]\nname = \"w\"\n[spec]\n",
+            "kind = \"Webhook\"\n[metadata]\nname = \"w\"\n[spec]\ndirection = \"inbound\"\n",
         );
         let p = check(&[w, w2]);
         assert_eq!(p.len(), 2, "{p:?}");
+    }
+
+    #[test]
+    fn outbound_webhooks_name_public_https_targets_and_bindings() {
+        let hook = |spec: &str| {
+            res(
+                "w",
+                &format!("kind = \"Webhook\"\n[metadata]\nname = \"w\"\n[spec]\n{spec}"),
+            )
+        };
+        let good = "direction = \"outbound\"\nurl = \"https://hooks.example.com/in\"\nsigning = { scheme = \"standard-webhooks\", secretRef = \"PLAYPILOT_WEBHOOK_SECRET_W\" }\nevents = [\"com.github.pull_request\"]\n";
+        assert!(check(&[hook(good)]).is_empty());
+        let by_ref = good.replace(
+            "\"https://hooks.example.com/in\"",
+            "{ secretRef = \"PLAYPILOT_WEBHOOK_URL_W\" }",
+        );
+        assert!(check(&[hook(&by_ref)]).is_empty());
+        for (from, to, needle) in [
+            (
+                "https://hooks.example.com/in",
+                "http://hooks.example.com/in",
+                "https://",
+            ),
+            (
+                "https://hooks.example.com/in",
+                "https://127.0.0.1/in",
+                "private",
+            ),
+            (
+                "https://hooks.example.com/in",
+                "https://localhost/in",
+                "local host",
+            ),
+            ("https://hooks.example.com/in", "https://[::1]/in", "IPv6"),
+            (
+                "PLAYPILOT_WEBHOOK_SECRET_W",
+                "PLAYPILOT_GITHUB_WEBHOOK_SECRET",
+                "signing.secretRef",
+            ),
+            ("standard-webhooks", "github", "signing.scheme"),
+            (
+                "[\"com.github.pull_request\"]",
+                "[\"com..github\"]",
+                "dotted type prefix",
+            ),
+            ("[\"com.github.pull_request\"]", "[]", "at least one"),
+        ] {
+            let p = check(&[hook(&good.replace(from, to))]);
+            assert_eq!(p.len(), 1, "{to}: {p:?}");
+            assert!(p[0].contains(needle), "{to}: {p:?}");
+        }
+        let p = check(&[hook(&good.replace(
+            "\"https://hooks.example.com/in\"",
+            "{ secretRef = \"OTHER_URL\" }",
+        ))]);
+        assert!(p[0].contains("url secretRef"), "{p:?}");
     }
 }
 

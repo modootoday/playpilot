@@ -45,14 +45,18 @@ pub fn arguments(q: &Query) -> Map<String, Value> {
     args
 }
 
-impl<P: Post> EventSource for WorkerEvents<P> {
-    fn read(&self, q: &Query) -> Result<Page, String> {
+impl<P: Post> WorkerEvents<P> {
+    /// One `/mcp` tool call; the tool result on success.
+    pub fn call(&self, tool: &str, args: Map<String, Value>) -> Result<Value, String> {
         let id = self.next_id.get();
         self.next_id.set(id + 1);
-        let (status, text) = self
-            .post
-            .post(&rpc_request(id, "events_read", arguments(q)))?;
-        let result = tool_outcome(status, &text)?;
-        page_from_structured(&result)
+        let (status, text) = self.post.post(&rpc_request(id, tool, args))?;
+        tool_outcome(status, &text)
+    }
+}
+
+impl<P: Post> EventSource for WorkerEvents<P> {
+    fn read(&self, q: &Query) -> Result<Page, String> {
+        page_from_structured(&self.call("events_read", arguments(q))?)
     }
 }
