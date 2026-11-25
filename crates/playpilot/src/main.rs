@@ -4,6 +4,7 @@
 //! blocks it and the stderr text is shown to Claude.
 
 mod claim;
+mod events;
 mod gh;
 mod history;
 mod install;
@@ -26,6 +27,7 @@ fn main() -> ExitCode {
     match std::env::args().nth(1).as_deref() {
         Some("guard") => guard(),
         Some("mail") => mail::cli::main(std::env::args().skip(2).collect()),
+        Some("events") => events::cli::main(std::env::args().skip(2).collect()),
         Some("mcp") => mcp::main(),
         Some(v @ ("claim" | "release")) => claim::cli::main(v, std::env::args().skip(2).collect()),
         Some("history-check") => history_check(std::env::args().skip(2).collect()),
@@ -50,6 +52,14 @@ fn main() -> ExitCode {
                 "       playpilot mcp   (MCP server on stdio; env PLAYPILOT_MAIL_URL or PLAYPILOT_MAILBOX_REPO, PLAYPILOT_ACTOR)"
             );
             eprintln!("       playpilot claim|release <owner/repo#n> ... (playpilot claim --help)");
+            eprintln!(
+                "       {}",
+                events::cli::USAGE
+                    .lines()
+                    .next()
+                    .unwrap_or_default()
+                    .trim_start_matches("usage: ")
+            );
             eprintln!("       playpilot validate <fleet-dir>");
             eprintln!(
                 "       {}",
