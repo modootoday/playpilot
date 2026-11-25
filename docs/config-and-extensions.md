@@ -139,7 +139,7 @@ App installation (issues/labels write, contents read) and, only for waking
 sessions, per-task routine tokens (below); no other Claude credentials.
 The Worker lives in `crates/playpilot-worker` (Durable Objects `LeaseObject`,
 `NodeObject`, `BusObject`, `EventsObject`, plus a remote MCP endpoint `POST /mcp` with the
-local `playpilot mcp` tool names). Build with `worker-build --release`.
+local `playpilot mcp` tool names and `events_read`). Build with `worker-build --release`.
 
 Access check. The Worker does not trust Access headers as such: on `/v1/*`
 it verifies `Cf-Access-Jwt-Assertion` (RS256, signed by a key from
@@ -233,6 +233,22 @@ executed or interpreted. Events go to the `EventsObject` Durable Object
 window is answered as a duplicate. GitHub signatures carry no timestamp,
 so a captured delivery replayed after 14 days would be stored again.
 
+Reading events. The `/mcp` tool `events_read` (Worker only; the local
+`playpilot mcp` has no event log) returns stored events oldest first:
+
+| Argument | Meaning |
+| --- | --- |
+| `after` | cursor: only events with a larger `seq` (default `0`, the oldest kept) |
+| `limit` | events per call, default 100; more than 200 is capped at 200, `0` is refused |
+| `type` | type prefix on dot boundaries: `com.github.pull_request` matches `com.github.pull_request` and `com.github.pull_request.opened`, not `com.github.pull_request_review` |
+
+`structuredContent` is `{"events": [{"seq", "received_at", "type", "event"}],
+"next"}`, where `event` is the stored CloudEvent and `next` is the cursor for
+the following call. Any valid `/mcp` bearer token may read: events are
+fleet-wide and already reduced to the allow-list above, so no extra grant is
+needed; an `as`, when given, must still be one of the token's actors. No new
+public route serves the log. `playpilot events tail` is the CLI for it.
+
 Owner setup (A2; agents never set the secret or create the hook):
 
 1. Generate a random secret on your own machine and enter it only at the
@@ -259,10 +275,8 @@ Owner setup (A2; agents never set the secret or create the hook):
 
 Implemented: `guard`, `history-check`, `surface-check`, `validate`, `migrate`,
 `render settings | roles | prompt | node | plugins`, `sync`, `node install`, `plan`, `whoami`,
-`claim`, `release`, `mail send | inbox | read | ack` and `mcp`. Usage, exit codes and environment
+`claim`, `release`, `mail send | inbox | read | ack`, `events tail` and `mcp`. Usage, exit codes and environment
 variables are in the [CLI reference](guides/cli.md).
-
-Planned: `events tail`.
 
 - `plan`: who does what (device × lane × project × role), and what is uncovered.
 - `render`: writes `.claude/settings.json`, role files, systemd units,
@@ -284,7 +298,7 @@ Planned: `events tail`.
   `playpilot.io/v1` today it validates and changes nothing. `--check` lists
   files that would change (exit 1); a rewrite that would drop TOML comments
   needs `--force`.
-- `events tail` (planned): follows fleet CloudEvents.
+- `events tail` (implemented): prints and follows the stored inbound events through the Worker (`events_read` on `/mcp`).
 
 Releases come from the owner-run `release` workflow
 (`.github/workflows/release.yml`): Linux x86_64 and aarch64 and Windows x86_64

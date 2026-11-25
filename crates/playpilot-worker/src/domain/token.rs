@@ -93,6 +93,12 @@ impl TokenMap {
         self.0.get(&sha256_hex(token))
     }
 
+    /// The grant for an `Authorization` header value; `None` for a missing,
+    /// malformed or unknown bearer token. Every `/mcp` tool needs one.
+    pub fn grant_for(&self, header: Option<&str>) -> Option<&Grant> {
+        self.authenticate(bearer(header)?)
+    }
+
     /// Every actor any token may speak for, sorted and unique.
     pub fn actors(&self) -> Vec<String> {
         let mut a: Vec<String> = self.0.values().flat_map(|g| g.actors.clone()).collect();

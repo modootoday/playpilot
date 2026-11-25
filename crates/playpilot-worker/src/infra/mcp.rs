@@ -8,7 +8,9 @@ use worker::{Env, Request, Response, Result};
 use super::{call, http, settings, wake};
 use crate::domain::bus::message::{Envelope, Receipt};
 use crate::domain::bus::{BusCmd, BusReply};
+use crate::domain::eventlog::LogReply;
 use crate::domain::lease::{LeaseCmd, LeaseReply, Limits, clamp_ttl};
+use crate::domain::mcp::events::{self, EventsRead};
 use crate::domain::mcp::protocol::{Step, handle as parse, tool_result, tool_result_structured};
 use crate::domain::mcp::tools::{self, Command, Invocation};
 use crate::domain::token::Caller;
@@ -59,7 +61,31 @@ async fn run(env: &Env, caller: &Caller, id: &Value, call: Invocation) -> Value 
             Err(e) => tool_result(id, Err(e)),
         };
     }
+    if let Command::EventsRead(read) = &call.command {
+        return read_events(env, caller, id, read, call.as_actor.as_deref()).await;
+    }
     tool_result(id, run_text(env, caller, call).await)
+}
+
+async fn read_events(
+    env: &Env,
+    caller: &Caller,
+    id: &Value,
+    read: &EventsRead,
+    as_actor: Option<&str>,
+) -> Value {
+    if let Err(e) = events::authorize(caller, as_actor) {
+        return tool_result(id, Err(e));
+    }
+    match call::events(env, &events::command(read)).await {
+        Ok(LogReply::Events(list)) => tool_result_structured(
+            id,
+            events::render(read.after, &list),
+            events::structured(read.after, &list),
+        ),
+        Ok(LogReply::Error(e)) | Err(e) => tool_result(id, Err(e)),
+        Ok(other) => tool_result(id, Err(format!("unexpected reply {other:?}"))),
+    }
 }
 
 async fn run_text(
@@ -71,7 +97,9 @@ async fn run_text(
     let actor = me.actor.clone();
     let command = call.command;
     match command {
-        Command::Whoami | Command::MailInbox { .. } => Err("handled above".into()),
+        Command::Whoami | Command::MailInbox { .. } | Command::EventsRead(_) => {
+            Err("handled above".into())
+        }
         Command::MailSend {
             to,
             subject,

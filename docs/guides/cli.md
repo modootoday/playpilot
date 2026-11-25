@@ -29,13 +29,13 @@ Every subcommand uses the same small set:
 | `PLAYPILOT_DEVICE` | `whoami` | device name when `--device` is not given |
 | `PLAYPILOT_ACTOR` | `mail`, `mcp`, `claim`, `release` | this session's actor (mailbox name); the claim id when `PLAYPILOT_CLAIM_ID` is unset |
 | `PLAYPILOT_CLAIM_ID` | `claim`, `release`, `mcp` | the id written on claims; use one that names no device |
-| `PLAYPILOT_MAIL_URL` | `mail`, `mcp`, `claim`, `release` | the Worker's `/mcp` URL; when set, mail goes through the Worker; the lease endpoint for `--backend worker` |
-| `PLAYPILOT_MCP_TOKEN` | `mail`, `mcp`, `claim`, `release` | bearer token for the Worker's `/mcp` |
+| `PLAYPILOT_MAIL_URL` | `mail`, `mcp`, `claim`, `release`, `events` | the Worker's `/mcp` URL; when set, mail goes through the Worker; the lease endpoint for `--backend worker`; the event source for `events tail` |
+| `PLAYPILOT_MCP_TOKEN` | `mail`, `mcp`, `claim`, `release`, `events` | bearer token for the Worker's `/mcp` |
 | `PLAYPILOT_CLAIM_BACKEND` | `claim`, `release` | `github` (default) or `worker`, when `--backend` is not given |
 | `PLAYPILOT_MAILBOX_REPO` | `mail`, `mcp` | `owner/name` of the mailbox repository (GitHub transport) |
 
 `claim`, `release` and the GitHub mail transport call GitHub through the `gh`
-CLI and its login. The Worker mail transport and Worker leases use `curl`.
+CLI and its login. The Worker mail transport, Worker leases and `events tail` use `curl`.
 
 ## guard
 
@@ -318,6 +318,41 @@ message handled. The Worker at
 `PLAYPILOT_MAIL_URL` is used when set, otherwise the GitHub repository. Exit
 `0` on success, `1` on failure, `64` on `--help` or a missing verb.
 
+## events tail
+
+Prints the inbound events the Worker stored (GitHub deliveries as
+CloudEvents, [Inbound GitHub webhooks](../config-and-extensions.md#inbound-github-webhooks)),
+oldest first, through the `/mcp` tool `events_read`.
+
+```
+playpilot events tail [--type <prefix>] [--after <seq>] [--limit <n>] [--follow [--interval <secs>]] [--json]
+```
+
+Each event is one line: `seq`, time, type, source (without `https://`) and a
+summary of the allow-listed data, `repo#number action`, `ref@sha` (7
+characters) and `by sender`:
+
+```
+12  2026-11-25T10:00:01Z  com.github.pull_request.opened  github.com/octo-org/hello  octo-org/hello#7 opened by octocat
+```
+
+`--json` prints each stored CloudEvent as one JSON line instead. `--type`
+filters by a type prefix on dot boundaries (`com.github.pull_request` does not
+match `com.github.pull_request_review`). `--after` starts after a `seq`
+(default `0`, the oldest event kept); `--limit` is 1 to 200 (default 100).
+
+Without `--follow` it reads one page and exits. With `--follow` it keeps
+reading from the last `seq`: a full page is followed at once, otherwise it
+waits `--interval` seconds (default 15). A network or Worker error while
+following is printed to stderr and retried, waiting the interval doubled per
+failure up to five minutes; it never ends the command. Stop it with Ctrl-C.
+
+The Worker is `PLAYPILOT_MAIL_URL`, with the token from `PLAYPILOT_MCP_TOKEN`
+(or the environment's credential for the Worker host); any valid token may
+read events. Event data is printed, never interpreted. Exit `0` on success,
+`1` on failure (a read error without `--follow`, or no `PLAYPILOT_MAIL_URL`),
+`64` on a usage error.
+
 ## mcp
 
 A Model Context Protocol server on stdio that exposes the same use cases as
@@ -336,7 +371,8 @@ so a tool call cannot speak for another actor. Exits `0` when stdin closes.
 
 The optional Cloudflare Worker (`crates/playpilot-worker`) is not a CLI
 subcommand. It serves the HTTP API, leases, the mailbox, a remote `/mcp`
-endpoint with the same tool names, and inbound GitHub webhooks on
+endpoint with the same tool names plus `events_read` (the stored events, read by
+`events tail`), and inbound GitHub webhooks on
 `POST /hooks/github`. Routes and how each authenticates:
 
 | Route | Auth | Host |
