@@ -703,7 +703,14 @@ mod render_rules {
         assert!(xml.contains("<RunLevel>LeastPrivilege</RunLevel>"));
         assert!(xml.contains("<RestartOnFailure>"));
         assert!(xml.contains("rc-server.ps1"));
-        assert!(xml.contains("-Workspace \"%USERPROFILE%\\fleet\\playpilot\" -Capacity 1<"));
+        assert!(xml.contains("-File \"__PLAYPILOT_APPDATA__\\fleet\\rc-server.ps1\""));
+        assert!(
+            xml.contains("-Workspace \"__PLAYPILOT_USERPROFILE__\\fleet\\playpilot\" -Capacity 1<")
+        );
+        assert!(
+            !xml.contains('%'),
+            "Task Scheduler does not expand %VAR% in arguments"
+        );
         assert!(node_files(&rts, None).is_err());
         assert!(node_files(&rts, Some("..")).is_err());
         assert!(node_files(&rts, Some("a\"b")).is_err());
@@ -1301,18 +1308,20 @@ mod install_rules {
         let windows = targets(&BOTH[1..], Some("example"), dir).unwrap();
         assert_eq!(windows[0].path, dir.join(WINDOWS_TASK));
         let steps = next_steps(Platform::Windows, &windows, Some("example"));
-        assert_eq!(steps.len(), 1);
+        assert_eq!(steps.len(), 2);
+        assert!(steps[0].starts_with("Set-Location \"$env:USERPROFILE\\fleet\\example\"; claude"));
+        assert!(steps[0].contains("trust"));
         assert!(
-            steps[0].starts_with(
+            steps[1].starts_with(
                 "Register-ScheduledTask -TaskName claude-rc -Xml ((Get-Content -Raw '"
             )
         );
-        assert!(steps[0].contains(crate::render::node::TASK_USER));
         assert!(
-            steps[0].ends_with(
-                "-replace '__PLAYPILOT_TASK_USER__', \"$env:USERDOMAIN\\$env:USERNAME\")"
-            )
+            steps[1]
+                .contains("-replace '__PLAYPILOT_TASK_USER__', \"$env:USERDOMAIN\\$env:USERNAME\"")
         );
+        assert!(steps[1].contains("-replace '__PLAYPILOT_APPDATA__', $env:APPDATA"));
+        assert!(steps[1].ends_with("-replace '__PLAYPILOT_USERPROFILE__', $env:USERPROFILE)"));
         assert!(targets(&BOTH[1..], None, dir).is_err());
     }
 }
