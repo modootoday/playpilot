@@ -6,6 +6,7 @@ use worker::wasm_bindgen::JsValue;
 use worker::{Env, Method, Request, RequestInit};
 
 use crate::domain::bus::{BusCmd, BusReply};
+use crate::domain::eventlog::{LogCmd, LogReply};
 use crate::domain::lease::{LeaseCmd, LeaseReply};
 use crate::domain::node::{NodeCmd, NodeReply};
 
@@ -46,4 +47,8 @@ pub async fn nodes(env: &Env, cmd: &NodeCmd) -> Result<NodeReply, String> {
 
 pub async fn bus(env: &Env, cmd: &BusCmd) -> Result<BusReply, String> {
     call(env, "BUS", cmd).await
+}
+
+pub async fn events(env: &Env, cmd: &LogCmd) -> Result<LogReply, String> {
+    call(env, "EVENTS", cmd).await
 }

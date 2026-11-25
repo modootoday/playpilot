@@ -131,12 +131,14 @@ Worker HTTP API (OpenAPI 3.1, [`schemas/worker.v1.openapi.yaml`](../schemas/work
 every call but the public `GET /v1/state` subset sends the
 `CF-Access-Client-Id` / `CF-Access-Client-Secret` headers):
 `GET /v1/config`, `POST /v1/leases`, `DELETE /v1/leases/{id}`,
-`POST /v1/nodes/{id}/heartbeat`, `POST /v1/events`, `GET /v1/state`.
+`POST /v1/nodes/{id}/heartbeat`, `POST /v1/events`, `GET /v1/state`;
+and, signed by GitHub instead of Access, `POST /hooks/github`
+([below](#inbound-github-webhooks)).
 Access: Cloudflare Access service tokens per node. The Worker holds a GitHub
 App installation (issues/labels write, contents read) and, only for waking
 sessions, per-task routine tokens (below); no other Claude credentials.
 The Worker lives in `crates/playpilot-worker` (Durable Objects `LeaseObject`,
-`NodeObject`, `BusObject`, plus a remote MCP endpoint `POST /mcp` with the
+`NodeObject`, `BusObject`, `EventsObject`, plus a remote MCP endpoint `POST /mcp` with the
 local `playpilot mcp` tool names). Build with `worker-build --release`.
 
 Access check. The Worker does not trust Access headers as such: on `/v1/*`
@@ -198,6 +200,52 @@ never goes into the fire text; the new session reads it with `mail_inbox`.
 still has unacked mail; acking everything resets the window. Upstream limits
 are 30 fires per hour per task and 100 per hour per account, with no
 idempotency key; a failed or `429` fire is logged and never fails the send.
+
+### Inbound GitHub webhooks
+
+`POST /hooks/github` takes GitHub webhook deliveries. Its only credential is
+the `X-Hub-Signature-256` header: an HMAC-SHA256 of the raw body under the
+Worker secret `PLAYPILOT_GITHUB_WEBHOOK_SECRET`, compared in constant time.
+Access and bearer tokens play no part, and the path is served on whatever
+host routes to the Worker, so route `/hooks/*` on a host without Access
+(GitHub cannot present an Access token).
+
+| Case | Response |
+| --- | --- |
+| Secret not set (fail closed; nothing is accepted unsigned) | `503` |
+| Body over 1 MiB | `413` |
+| Signature missing or wrong | `401` |
+| Content type other than `application/json` | `415` |
+| Missing or malformed `X-GitHub-Event` / `X-GitHub-Delivery`, body not a JSON object | `400` |
+| Stored | `202` `{"id": "<delivery>", "status": "accepted"}` |
+| Delivery id already stored (re-delivery or replay) | `200` `{"id": "<delivery>", "status": "duplicate"}` |
+
+A stored delivery is a CloudEvent: `id` is `X-GitHub-Delivery`, `source` is
+`https://github.com/<owner>/<repo>` (the organization or the app
+installation when there is no repository), `type` is
+`com.github.<event>[.<action>]`, `time` is the receipt time, and `data` is an
+allow-listed projection: `repository`, `number`, `action`, `sender`, `ref`,
+`sha`, `labels` (names) and `state`. Titles, bodies, comments, commit
+messages and every other field are dropped; payload text is never stored,
+executed or interpreted. Events go to the `EventsObject` Durable Object
+(binding `EVENTS`), which keeps the newest 1000 events and none older than
+14 days, and remembers delivery ids for 14 days, so a replay inside that
+window is answered as a duplicate. GitHub signatures carry no timestamp,
+so a captured delivery replayed after 14 days would be stored again.
+
+Owner setup (A2; agents never set the secret or create the hook):
+
+1. Generate a random secret on your own machine and enter it only at the
+   prompt: `wrangler secret put PLAYPILOT_GITHUB_WEBHOOK_SECRET --env stage`
+   (run from `crates/playpilot-worker`).
+2. Deploy so the `v2` migration creates `EventsObject`, and route
+   `/hooks/*` on a host without Access.
+3. Create a repository or organization webhook (or set the webhook of a
+   GitHub App): payload URL `https://<hooks host>/hooks/github`, content type
+   `application/json`, the same secret, SSL verification on, and the events
+   you want. GitHub sends a `ping` first; it is stored as `com.github.ping`.
+4. Check the hook's "Recent deliveries" page: `202` for the ping, and
+   "Redeliver" answers `200` with `duplicate`.
 
 ## 6. Change control
 

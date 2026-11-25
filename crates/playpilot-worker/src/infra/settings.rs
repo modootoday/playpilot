@@ -29,6 +29,8 @@ pub const OPS: &str = "PLAYPILOT_OPS";
 pub const MCP_TOKENS: &str = "PLAYPILOT_MCP_TOKENS";
 /// JSON map from actor to the routine fired when it gets mail.
 pub const WAKE: &str = "PLAYPILOT_WAKE";
+/// Secret shared with the GitHub webhook; read only as a secret, never a var.
+pub const GITHUB_WEBHOOK_SECRET: &str = "PLAYPILOT_GITHUB_WEBHOOK_SECRET";
 /// Minutes without a heartbeat before a node is offline.
 pub const OFFLINE_MINUTES: &str = "PLAYPILOT_OFFLINE_MINUTES";
 
@@ -94,6 +96,14 @@ pub fn switches(env: &Env, config: Option<&Compiled>) -> Result<Switches, String
         file,
         worker: worker_ops(env)?,
     })
+}
+
+/// The webhook secret; unset or empty means every delivery is refused.
+pub fn github_webhook_secret(env: &Env) -> Option<String> {
+    env.secret(GITHUB_WEBHOOK_SECRET)
+        .map(|s| s.to_string())
+        .ok()
+        .filter(|s| !s.is_empty())
 }
 
 pub fn offline_after(env: &Env) -> u64 {

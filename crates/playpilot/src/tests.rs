@@ -1119,6 +1119,8 @@ mod schema_files {
             "/v1/nodes/{id}/heartbeat:",
             "/v1/events:",
             "/v1/state:",
+            "/hooks/github:",
+            "X-Hub-Signature-256",
             "CF-Access-Client-Id",
             "CF-Access-Client-Secret",
         ] {

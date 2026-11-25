@@ -18,6 +18,11 @@
 # /mcp is served on a second host without Access: set PLAYPILOT_MCP_TOKENS
 # (token hashes to actors) and, for wake on mail, PLAYPILOT_WAKE as secrets.
 # Route only /mcp* on that host; /v1/* relies on Access in front of it.
+#
+# /hooks/github (inbound GitHub webhooks) checks only X-Hub-Signature-256
+# against the secret PLAYPILOT_GITHUB_WEBHOOK_SECRET (owner sets it with
+# wrangler secret put). Without it every delivery gets 503. Route /hooks/*
+# on a host without Access; GitHub cannot present an Access token.
 name = "playpilot"
 main = "build/index.js"
 compatibility_date = "2026-11-01"
@@ -44,9 +49,17 @@ class_name = "NodeObject"
 name = "BUS"
 class_name = "BusObject"
 
+[[durable_objects.bindings]]
+name = "EVENTS"
+class_name = "EventsObject"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["LeaseObject", "NodeObject", "BusObject"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["EventsObject"]
 
 [env.stage]
 name = "playpilot-stage"
@@ -69,3 +82,7 @@ class_name = "NodeObject"
 [[env.stage.durable_objects.bindings]]
 name = "BUS"
 class_name = "BusObject"
+
+[[env.stage.durable_objects.bindings]]
+name = "EVENTS"
+class_name = "EventsObject"

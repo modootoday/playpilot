@@ -6,8 +6,10 @@ info:
     Phase B of central management (docs/config-and-extensions.md, section 5).
     Git stays the source of configuration; the Worker serves the compiled
     config, holds atomic lane leases, records heartbeats and fans out events.
-    Every call except the public state subset needs a Cloudflare Access
+    Every /v1 call except the public state subset needs a Cloudflare Access
     service token, one per node. Node ids are opaque and never name a device.
+    POST /hooks/github is the exception: it is authenticated only by the
+    GitHub payload signature, never by Access or a bearer token.
   license:
     name: Apache-2.0
     identifier: Apache-2.0
@@ -169,6 +171,87 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PublicState'
+  /hooks/github:
+    post:
+      operationId: receiveGithubWebhook
+      summary: Inbound GitHub webhook delivery
+      description: |
+        Served on whatever host routes to the Worker; route it on a host
+        without Access. The only credential is `X-Hub-Signature-256`, an
+        HMAC-SHA256 of the raw body under the Worker secret
+        `PLAYPILOT_GITHUB_WEBHOOK_SECRET`, compared in constant time.
+        Without that secret every delivery gets 503 (fail closed).
+        An accepted delivery is stored as a `GithubEvent` CloudEvent whose
+        `data` is the allow-listed `GithubEventData` projection; the payload
+        text itself is never stored, executed or interpreted. Deliveries are
+        de-duplicated by `X-GitHub-Delivery` for 14 days; the log keeps the
+        newest 1000 events and none older than 14 days.
+      security: []
+      parameters:
+        - name: X-Hub-Signature-256
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^sha256=[0-9a-fA-F]{64}$'
+        - name: X-GitHub-Event
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z_]{1,64}$'
+        - name: X-GitHub-Delivery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9-]{1,128}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              description: The GitHub webhook payload, at most 1 MiB.
+              type: object
+      responses:
+        '202':
+          description: Verified and stored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HookReceipt'
+        '200':
+          description: A re-delivery of an id already stored; not stored again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HookReceipt'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Missing or invalid signature.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '413':
+          description: The body is larger than 1 MiB.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '415':
+          description: The webhook content type is not application/json.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: The webhook secret is not configured.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 components:
   securitySchemes:
     cfAccessClientId:
@@ -350,6 +433,72 @@ components:
           type: string
           format: uri
         data: {}
+    HookReceipt:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          description: The X-GitHub-Delivery id.
+          type: string
+        status:
+          enum: [accepted, duplicate]
+    GithubEvent:
+      description: |
+        How a delivery is stored: a CloudEvent with id = X-GitHub-Delivery,
+        source = the repository URL (or the organization, or the app
+        installation, when there is no repository), type =
+        com.github.<event>[.<action>], time = receipt time.
+      type: object
+      required: [specversion, id, source, type, time, datacontenttype, data]
+      properties:
+        specversion:
+          const: '1.0'
+        id:
+          type: string
+        source:
+          type: string
+          format: uri
+        type:
+          type: string
+          pattern: '^com\.github\.[a-z_]+(\.[a-z_]+)?$'
+        time:
+          type: string
+          format: date-time
+        datacontenttype:
+          const: application/json
+        data:
+          $ref: '#/components/schemas/GithubEventData'
+    GithubEventData:
+      description: The only payload fields kept; each is left out when absent or malformed.
+      type: object
+      additionalProperties: false
+      properties:
+        repository:
+          description: repository.full_name
+          type: string
+        number:
+          description: number, issue.number or pull_request.number
+          type: integer
+        action:
+          type: string
+        sender:
+          description: sender.login
+          type: string
+        ref:
+          type: string
+        sha:
+          description: after, pull_request.head.sha or the check/workflow head_sha
+          type: string
+          pattern: '^[0-9a-f]{40}([0-9a-f]{24})?$'
+        labels:
+          description: Label names of the issue or pull request.
+          type: array
+          maxItems: 100
+          items:
+            type: string
+        state:
+          description: pull_request.state, issue.state or state
+          type: string
     PublicState:
       type: object
       required: [generatedAt, nodes, lanes]

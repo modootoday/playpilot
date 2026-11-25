@@ -9,6 +9,8 @@ pub enum Route {
     Events,
     State,
     Mcp,
+    /// `POST /hooks/github`: inbound GitHub webhooks.
+    GithubHook,
     /// Known path, wrong method; carries the `Allow` header value.
     MethodNotAllowed(&'static str),
     NotFound,
@@ -23,6 +25,8 @@ pub enum Auth {
     Access,
     /// `/mcp`: a bearer token the Worker checks itself, on any host.
     Bearer,
+    /// `/hooks/*`: only the sender's payload signature; no Access, no bearer.
+    Signature,
 }
 
 impl Route {
@@ -30,6 +34,7 @@ impl Route {
         match self {
             Route::State | Route::NotFound | Route::MethodNotAllowed(_) => Auth::None,
             Route::Mcp => Auth::Bearer,
+            Route::GithubHook => Auth::Signature,
             _ => Auth::Access,
         }
     }
@@ -66,6 +71,7 @@ pub fn route(method: &str, path: &str) -> Route {
         ["v1", "events"] => pick("POST", "POST", Route::Events),
         ["v1", "state"] => pick("GET", "GET", Route::State),
         ["mcp"] => pick("POST", "POST", Route::Mcp),
+        ["hooks", "github"] => pick("POST", "POST", Route::GithubHook),
         _ => Route::NotFound,
     }
 }
@@ -89,12 +95,18 @@ mod tests {
         assert_eq!(route("POST", "/v1/events"), Route::Events);
         assert_eq!(route("GET", "/v1/state/"), Route::State);
         assert_eq!(route("POST", "/mcp"), Route::Mcp);
+        assert_eq!(route("POST", "/hooks/github"), Route::GithubHook);
     }
 
     #[test]
     fn rejects() {
         assert_eq!(route("POST", "/v1/config"), Route::MethodNotAllowed("GET"));
         assert_eq!(route("GET", "/mcp"), Route::MethodNotAllowed("POST"));
+        assert_eq!(
+            route("GET", "/hooks/github"),
+            Route::MethodNotAllowed("POST")
+        );
+        assert_eq!(route("POST", "/hooks/other"), Route::NotFound);
         assert_eq!(route("GET", "/v1/other"), Route::NotFound);
         assert_eq!(route("DELETE", "/v1/leases/a%20b"), Route::NotFound);
         assert_eq!(route("GET", "/"), Route::NotFound);
@@ -107,5 +119,6 @@ mod tests {
         assert_eq!(Route::Config.auth(), Auth::Access);
         assert_eq!(Route::Heartbeat("n".into()).auth(), Auth::Access);
         assert_eq!(Route::Mcp.auth(), Auth::Bearer);
+        assert_eq!(Route::GithubHook.auth(), Auth::Signature);
     }
 }
