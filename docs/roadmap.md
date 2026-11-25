@@ -28,7 +28,7 @@ owner), `optional`.
 
 | Row | Level | Depends on | Work | Accepted when |
 | --- | --- | --- | --- | --- |
-| R1 | A0 | — | **Worker-backed claims**: `playpilot claim --backend worker` takes a Durable Object lease, then mirrors it as the `claimed` label and claim comment; `release` frees both; a lease that expires is released on the item | Host tests for the mirror; a live claim on stage shows lease + label; expiry releases the label |
+| R1 | A0 | — | **Worker-backed claims** (done, #39; live on stage 2026-11-24: claim showed lease + label, expiry released the label): `playpilot claim --backend worker` takes a Durable Object lease, then mirrors it as the `claimed` label and claim comment; `release` frees both; a lease that expires is released on the item | Host tests for the mirror; a live claim on stage shows lease + label; expiry releases the label |
 | R2 | A2 | — | **Device service tokens**: the owner creates one Access service token per node and sets `PLAYPILOT_IDENTITIES` (client id → claim id) | `/v1/leases` with a node token returns 201 on stage |
 | R3 | A0 | R2 | **Node heartbeat**: `playpilot node heartbeat` (and the systemd / Task Scheduler units call it every 5 minutes); a heartbeat that renews leases also posts the new `lease: … until` line on each item, so `release --expired` keeps reading the right expiry | `/v1/state` shows the node online; offline after the window; a renewed lease is not swept |
 | R4 | A1 | — | **Inbound webhooks** on the hooks host: verify the GitHub signature (`X-Hub-Signature-256`), turn the delivery into a CloudEvent, store it, never execute payload text | Signature tests; a replayed or unsigned delivery is refused; a real GitHub ping is stored on stage |
